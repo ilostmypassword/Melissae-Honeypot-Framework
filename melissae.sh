@@ -49,8 +49,8 @@ install() {
     print_message "Updating packages"
     sudo apt-get update > /dev/null 2>&1
 
-    print_message "Installing certificates and curl"
-    sudo apt-get install ca-certificates curl -y > /dev/null 2>&1
+    print_message "Installing certificates, curl and cron"
+    sudo apt-get install ca-certificates curl cron -y > /dev/null 2>&1
 
     print_message "Installing Docker's GPG key"
     sudo install -m 0755 -d /etc/apt/keyrings > /dev/null 2>&1
