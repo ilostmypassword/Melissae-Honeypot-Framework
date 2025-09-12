@@ -105,7 +105,6 @@ The infrastructure is fully containerized with docker, and modules can be deploy
     |   |       |-- commands.log
     |   |       |-- sshd.log
     |   |-- mqtt
-    |   |   |-- server
     |   |   |-- logs
     |   |       |-- mosquitto.log
     |   |   |-- conf
@@ -302,9 +301,6 @@ There are currently 4 native modules:
   }
 ]
 ```
-
-- Usage
-  - `modules/mqtt/server` holds Mosquitto’s persistent runtime files. If you don't want your data to be persistent, just remove the volume from `docker-compose.yml` 
 
 ---
 
