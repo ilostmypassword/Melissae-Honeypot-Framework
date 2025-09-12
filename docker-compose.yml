@@ -68,3 +68,13 @@ services:
       - "502:502"
     volumes:
       - ./modules/modbus/logs:/host-logs/modbus
+      
+  melissae_mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: melissae_mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./modules/mqtt/conf:/mosquitto/config:ro
+      - ./modules/mqtt/server:/mosquitto/data
+      - ./modules/mqtt/logs/mosquitto.log:/mosquitto/log/mosquitto.log
