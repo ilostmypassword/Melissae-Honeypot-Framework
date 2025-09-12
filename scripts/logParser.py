@@ -38,6 +38,16 @@ PATTERNS = {
     'modbus': {
         'source': 'modules/modbus/logs/modbus.log',
         'pattern': re.compile(r'(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<ip>\d+\.\d+\.\d+\.\d+) \| (?P<action>.+?)(?:\s\|\s(?P<details>\{.*\}))?$')
+    },
+    'mqtt': {
+        'source': 'modules/mqtt/logs/mosquitto.log',
+        'patterns': {
+            'connect': re.compile(r'(?P<date>\d+): New client connected from (?P<ip>\d+\.\d+\.\d+\.\d+):\d+'),
+            'disconnect': re.compile(r'(?P<date>\d+): Client (?P<user>\S+) disconnected\.'),
+            'subscribe': re.compile(r'(?P<date>\d+): Received SUBSCRIBE from (?P<user>\S+)'),
+            'subscribe_topic': re.compile(r'^\s+(?P<path>\S+)'),
+            'publish': re.compile(r"(?P<date>\d+): Received PUBLISH from (?P<user>\S+).*?'(?P<path>[^']+)'.*?$(?P<size>\d+)\s+bytes$")
+        }
     }
 }
 
@@ -196,6 +206,84 @@ def process_modbus() -> List[Dict]:
                 logs.append(entry)
     return logs
 
+# Mosquitto Module parsing & processing
+def parse_mqtt_line(line: str, next_line: Optional[str], client_ip_map: Dict[str, str]) -> Optional[Dict]:
+    p = PATTERNS['mqtt']['patterns']
+
+    m = p['connect'].search(line)
+    if m:
+        dt = datetime.fromtimestamp(int(m.group('date')))
+        ip = m.group('ip')
+        client_match = re.search(r'as\s+(?P<client>\S+)', line)
+        if client_match:
+            client_ip_map[client_match.group('client')] = ip
+        return create_entry('mqtt', dt, ip, 'Client connected')
+
+    m = p['disconnect'].search(line)
+    if m:
+        dt = datetime.fromtimestamp(int(m.group('date')))
+        user = m.group('user')
+        ip = client_ip_map.get(user, 'unknown')
+        return create_entry('mqtt', dt, ip, 'Client disconnected', user=user)
+
+    m = p['subscribe'].search(line)
+    if m:
+        dt = datetime.fromtimestamp(int(m.group('date')))
+        user = m.group('user')
+        ip = client_ip_map.get(user, 'unknown')
+        topic = None
+        if next_line:
+            mt = p['subscribe_topic'].match(next_line)
+            if mt:
+                topic = mt.group('path')
+        action = f'Subscribe to "{topic}"' if topic else 'Subscribe'
+        return create_entry('mqtt', dt, ip, action, user=user)
+
+    m = p['publish'].search(line)
+    if m:
+        dt = datetime.fromtimestamp(int(m.group('date')))
+        user = m.group('user')
+        topic = m.group('path')
+        size = m.group('size')
+        ip = client_ip_map.get(user, 'unknown')
+        action = f'Publish to "{topic}" ({size} bytes)'
+        return create_entry('mqtt', dt, ip, action, user=user)
+
+    return None
+
+def process_mqtt() -> List[Dict]:
+    logs: List[Dict] = []
+    source = os.path.join(WORKING_DIR, PATTERNS['mqtt']['source'])
+    if not os.path.exists(source):
+        return logs
+
+    client_ip_map: Dict[str, str] = {}
+
+    with open(source, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip('\n')
+        next_line = lines[i+1].rstrip('\n') if i+1 < len(lines) else None
+
+        conn_match = PATTERNS['mqtt']['patterns']['connect'].search(line)
+        if conn_match:
+            ip = conn_match.group('ip')
+            client_match = re.search(r'as\s+(?P<client>\S+)', line)
+            if client_match:
+                client_ip_map[client_match.group('client')] = ip
+
+        entry = parse_mqtt_line(line, next_line, client_ip_map)
+        if entry:
+            logs.append(entry)
+            if PATTERNS['mqtt']['patterns']['subscribe'].search(line) and next_line and PATTERNS['mqtt']['patterns']['subscribe_topic'].match(next_line):
+                i += 2
+                continue
+        i += 1
+
+    return logs
+
 # Merging logs
 def merge_and_save(all_logs: List[Dict]) -> None:
     seen = set()
@@ -218,4 +306,5 @@ if __name__ == "__main__":
     all_logs.extend(process_ftp())
     all_logs.extend(process_http())
     all_logs.extend(process_modbus())
+    all_logs.extend(process_mqtt())
     merge_and_save(all_logs)
