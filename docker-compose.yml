@@ -76,5 +76,4 @@ services:
       - "1883:1883"
     volumes:
       - ./modules/mqtt/conf:/mosquitto/config:ro
-      - ./modules/mqtt/server:/mosquitto/data
       - ./modules/mqtt/logs/mosquitto.log:/mosquitto/log/mosquitto.log
