@@ -5,6 +5,7 @@ from pathlib import Path
 # Scoring rules by IP
 def calculate_protocol_score(ip_data):
     http_count = 0
+    mqtt_count = 0
     ssh_failed = False
     ssh_success = False
     ftp_failed = False
@@ -18,6 +19,8 @@ def calculate_protocol_score(ip_data):
 
         if protocol == 'HTTP':
             http_count += 1
+        elif protocol == 'MQTT':
+            mqtt_count += 1
         elif protocol == 'SSH':
             if 'failed' in action:
                 ssh_failed = True
@@ -43,7 +46,7 @@ def calculate_protocol_score(ip_data):
         return 4
 
     # Suspicious - Failed attempts or excessive HTTP or Modbus reconnaissance
-    elif http_count > 50 or ssh_failed or ftp_failed or modbus_read:
+    elif http_count > 50 or mqtt_count > 30 or ssh_failed or ftp_failed or modbus_read:
         return 2
 
     # Benign
