@@ -30,6 +30,7 @@ function generateStatistics() {
         uniqueIPs: new Set(logs.map(log => log.ip)).size,
         httpLogs: logs.filter(log => log.protocol === 'http').length,
         modbusLogs: logs.filter(log => log.protocol === 'modbus').length,
+        mqttLogs: logs.filter(log => log.protocol === 'mqtt').length,
         successSSHLogins: logs.filter(log => log.action === 'Login successful' && log.protocol === 'ssh').length,
         successFTPLogins: logs.filter(log => log.action === 'Login successful' && log.protocol === 'ftp').length,
         failedSSHAttempts: logs.filter(log => log.action.includes('Login failed') && log.protocol === 'ssh').length,
@@ -62,6 +63,10 @@ function generateStatistics() {
         <div class="stat-card" onclick="redirectToSearch('protocol:modbus')">
             <div class="stat-value">${stats.modbusLogs}</div>
             <div class="stat-label">Modbus Logs</div>
+        </div>
+        <div class="stat-card" onclick="redirectToSearch('protocol:mqtt')">
+            <div class="stat-value">${stats.mqttLogs}</div>
+            <div class="stat-label">MQTT Logs</div>
         </div>
         <div class="stat-card" onclick="redirectToSearch('action:failed and protocol:ssh')">
             <div class="stat-value">${stats.failedSSHAttempts}</div>
@@ -148,16 +153,17 @@ function renderCharts() {
         ssh: logs.filter(log => log.protocol === 'ssh').length,
         ftp: logs.filter(log => log.protocol === 'ftp').length,
         http: logs.filter(log => log.protocol === 'http').length,
-        modbus: logs.filter(log => log.protocol === 'modbus').length
+        modbus: logs.filter(log => log.protocol === 'modbus').length,
+        mqtt: logs.filter(log => log.protocol === 'mqtt').length
     };
 
     new Chart(document.getElementById('protocolChart'), {
         type: 'doughnut',
         data: {
-            labels: ['SSH', 'FTP', 'HTTP', 'Modbus'],
+            labels: ['SSH', 'FTP', 'HTTP', 'Modbus', 'MQTT'],
             datasets: [{
-                data: [protocolData.ssh, protocolData.ftp, protocolData.http, protocolData.modbus],
-                backgroundColor: ['#aab2c2', '#b3c2aa', "#b2aac2", "#c2aab2"]
+                data: [protocolData.ssh, protocolData.ftp, protocolData.http, protocolData.modbus, protocolData.mqtt],
+                backgroundColor: ['#aab2c2', '#b3c2aa', "#b2aac2", "#c2aab2", "#e7e18cff"]
             }]
         },
         options: {
