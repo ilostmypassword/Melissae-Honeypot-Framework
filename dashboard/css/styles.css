@@ -356,6 +356,11 @@ h1 {
     color: #f57c00;
 }
 
+.protocol-mqtt {
+    background-color: #ffe0e0;
+    color: #f50707;
+}
+
 /* ============================= */
 /*      ANIMATIONS & EFFECTS     */
 /* ============================= */
