@@ -22,7 +22,8 @@ The project includes a fully functional dashboard offering real-time visibility 
     - [Web](#web) 
     - [SSH](#ssh) 
     - [FTP](#ftp)
-    - [Modbus](#modbus) 
+    - [Modbus](#modbus)
+    - [MQTT](#mqtt)
 4. [Search Engine](#search-engine)
 5. [Threat Intelligence](#threat-intelligence)
 6. [Getting Started](#getting-started)
@@ -38,7 +39,7 @@ The project includes a fully functional dashboard offering real-time visibility 
 
 #### Key Features
 
-**Modular Service Support**: Configure Melissae to expose between 1 and 4 services simultaneously, allowing for flexible deployment scenarios tailored to your specific security needs. See [contributing](#contributing) if you're interested in developing new modules.  
+**Modular Service Support**: Configure Melissae to expose between 1 and 5 services simultaneously, allowing for flexible deployment scenarios tailored to your specific security needs. See [contributing](#contributing) if you're interested in developing new modules.  
   
   
 **Centralized Management Dashboard**: Monitor and manage your honeypot through a web-based dashboard, which offers:
@@ -103,6 +104,12 @@ The infrastructure is fully containerized with docker, and modules can be deploy
     |   |   |-- logs
     |   |       |-- commands.log
     |   |       |-- sshd.log
+    |   |-- mqtt
+    |   |   |-- server
+    |   |   |-- logs
+    |   |       |-- mosquitto.log
+    |   |   |-- conf
+    |   |       |-- mosquitto.conf
     |   |-- modbus
     |   |   |-- Dockerfile
     |   |   |-- server
@@ -213,7 +220,7 @@ There are currently 4 native modules:
     "protocol": "ftp",
     "date": "2025-04-16",
     "hour": "11:48:37",
-    "ip": "192.168.27.65",
+    "ip": "192.168.X.X",
     "action": "Login failed",
     "user": "test"
   }
@@ -240,14 +247,14 @@ There are currently 4 native modules:
     "protocol": "modbus",
     "date": "2025-05-30",
     "hour": "10:38:23",
-    "ip": "172.18.0.1",
+    "ip": "192.168.X.X",
     "action": "Read request - Read Holding Registers"
   },
   {
     "protocol": "modbus",
     "date": "2025-05-30", 
     "hour": "10:41:22",
-    "ip": "172.18.0.1",
+    "ip": "192.168.X.X",
     "action": "Write attempt - Write Multiple Registers"
   }
 ]
@@ -268,6 +275,39 @@ There are currently 4 native modules:
 
 ---
 
+#### MQTT
+
+| Type | Image | Container name|
+| :-------------------: | :----------: | :----------: |
+| Mosquitto Server            | eclipse-mosquitto:latest     | melissae_mqtt     |
+
+- Logs format
+
+```json
+[
+  {
+    "protocol": "mqtt",
+    "date": "2025-09-12",
+    "hour": "08:56:25",
+    "ip": "192.168.X.X",
+    "action": "Client connected"
+  },
+  {
+    "protocol": "mqtt",
+    "date": "2025-09-12",
+    "hour": "08:57:17",
+    "ip": "192.168.X.X",
+    "action": "Subscribe",
+    "user": "auto-XX"
+  }
+]
+```
+
+- Usage
+  - `modules/mqtt/server` holds Mosquitto’s persistent runtime files. If you don't want your data to be persistent, just remove the volume from `docker-compose.yml` 
+
+---
+
 ## Threat Intelligence
 
 The Threat Intelligence section of the dashboard provides a simple visual overview of detected threats.  
@@ -277,12 +317,11 @@ See [contributing](#contributing) if you're interested in developing the threat 
 There are 5 different verdicts:
 
 - **Benign**: Default verdict. 
-- **Suspicious**: Threat requested the web module > 50 times OR (Attempted to connect using SSH OR FTP) OR Performed Modbus read operations.
+- **Suspicious**: Threat requested the web module > 50 times OR requested the MQTT module > 30 times OR (Attempted to connect using SSH OR FTP) OR Performed Modbus read operations.
 - **Malicious**: Threat successfully connected via SSH OR FTP OR (Performed Modbus write operations AND Failed to connect to SSH OR FTP).
 - **Nefarious**: Threat connected via both SSH AND FTP OR (Performed Modbus write operations AND Successfuly connected via SSH OR FTP).
 
-![threat-intel](https://github.com/user-attachments/assets/b6e9fc77-18b5-4528-a08a-a8e5cbeec82c)
-
+<img width="1872" height="898" alt="threat" src="https://github.com/user-attachments/assets/1198ff92-0d89-4e96-9380-99dc3e3f3cdd" />
 
 IoCs can be exported in json.
 
@@ -329,7 +368,7 @@ user:admin or not path:/login
 protocol:modbus and action:read
 ```
 
-![search](https://github.com/user-attachments/assets/e8476368-baba-4c22-a1de-b99ffc2150c5)
+<img width="1871" height="901" alt="search" src="https://github.com/user-attachments/assets/164f92a1-3c11-44a0-9bed-e73012c320b1" />
 
 #### Limitations
 
@@ -383,7 +422,7 @@ usermod -aG docker your_username
 ./melissae.sh start [module 1] [module 2] [...]
 ```
 
-Available modules: `all`, `web`, `ssh`, `ftp`, `modbus`
+Available modules: `all`, `web`, `ssh`, `ftp`, `modbus`, `mqtt`
 
 Examples:
 ```bash
@@ -419,8 +458,7 @@ Then access the dasboard in your browser :
 
 `http://localhost:8080/`
 
-![dashboard](https://github.com/user-attachments/assets/0d8c4d30-eb62-49a0-af35-86af3e1e3940)
-
+<img width="1871" height="900" alt="dashboard" src="https://github.com/user-attachments/assets/7dd54f49-faaa-4dc8-918d-246784a545eb" />
 
 ---
 
@@ -443,9 +481,10 @@ Discord : https://discord.gg/RXWn85cnYm
 Priority Tasks :
 
  - [x] **Modbus Industrial Honeypot Module** - Complete TCP honeypot with PLC emulation
- - [ ] New modules need to be developed (SNMP, MQTT, etc.)
+ - [ ] MQTT module should be improved
+ - [ ] New modules need to be developed (SNMP, etc.)
  - [ ] Improve the search engine
- - [ ] Threat Intelligence must be developed
+ - [ ] Threat Intelligence must be developed (enrichment from threat intel feeds for example)
 
 ## Credits
 
