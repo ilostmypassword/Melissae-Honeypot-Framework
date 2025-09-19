@@ -481,6 +481,7 @@ Priority Tasks :
  - [ ] New modules need to be developed (SNMP, etc.)
  - [ ] Improve the search engine
  - [ ] Threat Intelligence must be developed (enrichment from threat intel feeds for example)
+ - [ ] Developing multi-instance capabilities
 
 ## Credits
 
