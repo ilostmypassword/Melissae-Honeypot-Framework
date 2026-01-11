@@ -6,9 +6,11 @@
 
 Melissae is a modular, containerized honeypot framework built to emulate real-world network services. It is designed for cybersecurity researchers, analysts, and SOC teams to detect, analyze, and better understand malicious activity on their infrastructure.
 
-Each service module runs in its own container, allowing flexible deployment and isolated execution, while collected logs are centralized, parsed, and enriched via a dedicated processing pipeline.
+Each service module runs in its own container, allowing flexible deployment and isolated execution. Collected logs are centralized in MongoDB via a dedicated pipeline (see [workflow](#workflow) for more details), and exposed through a Flask API consumed by the dashboard.
 
 The project includes a fully functional dashboard offering real-time visibility into attacker behavior, threat scoring, and IOC export, making Melissae not just a honeypot, but a lightweight threat intelligence platform.
+
+---
 
 ## Table of Contents
 
@@ -16,8 +18,9 @@ The project includes a fully functional dashboard offering real-time visibility 
     - [Key Features](#key-features) 
 2. [Infrastructure](#infrastructure)
     - [Schema](#schema)
-    - [Workflow](#workflow) 
     - [File Tree](#file-tree)
+    - [Workflow](#workflow)
+    - [Scheduled Jobs](#scheduled-jobs)
 3. [Modules](#modules)
     - [Web](#web) 
     - [SSH](#ssh) 
@@ -26,27 +29,35 @@ The project includes a fully functional dashboard offering real-time visibility 
     - [MQTT](#mqtt)
 4. [Search Engine](#search-engine)
 5. [Threat Intelligence](#threat-intelligence)
+    - [Scoring](#scoring)
+    - [STIX2 Export](#stix2-export)
+    - [Killchain Timeline](#killchain-timeline)
 6. [Getting Started](#getting-started)
     - [Installation](#installation)
     - [Starting up the Stack](#starting-up-the-stack)
     - [Accessing the Dashboard](#accessing-the-dashboard)
-    - [Destroying the Stack](#destroying-the-stack)
-7. [Contributing](#contributing)
-8. [Credits](#credits)
+    - [List deployed modules](#list-deployed-modules)
+    - [Destroy the Stack](#destroy-the-stack)
+7. [CLI Reference](#cli-reference)
+8. [Contributing](#contributing)
+9. [Credits](#credits)
 
 ---
+
 ## Overview
 
 #### Key Features
 
 **Modular Service Support**: Configure Melissae to expose between 1 and 5 services simultaneously, allowing for flexible deployment scenarios tailored to your specific security needs. See [contributing](#contributing) if you're interested in developing new modules.  
   
-  
 **Centralized Management Dashboard**: Monitor and manage your honeypot through a web-based dashboard, which offers:
 - **Statistical Analysis**: Visualize attack patterns, trends, and frequency.
-- **Advanced Log Search**: Utilize the Melissae Query Language (MQL), a simple query language (that will be developed more in the future), to perform searches within the captured logs.
-- **Data Export**: Export logs or Indicators of Compromise (IOCs) in JSON format, filtered according to specific criteria such as time, service type, or threat verdict.
-- **Threat Scoring**: Assess attacker danger levels with a built-in scoring system, categorizing threats by severity. This helps prioritize responses and allocate resources effectively.
+- **Log Search**: Use the Melissae Query Language (MQL), a simple query language (that will be developed more in the future), to perform searches within the captured logs.
+- **Logs Export**: Export logs in JSON format, filtered according to specific criteria such as time, service type, IP...
+- **Threat Scoring**: Assess attacker danger levels with a built-in scoring system, categorizing threats by severity.
+- **STIX 2 Export**: Export Threat Intelligence IOCs as STIX 2.1 indicators (one per IP) directly from the dashboard.
+- **Killchain View**: Click any IP in Threat Intelligence to open an attack killchain timeline grouped by protocol with start/end timestamps, ordered from oldest to newest, and jump to full logs from the same pivot.
+- **Automated Hygiene**: A nightly purge removes benign IoCs unseen for 24h and their associated logs to keep the dataset lean.
 
 ---
 
@@ -55,19 +66,21 @@ The project includes a fully functional dashboard offering real-time visibility 
 > [!WARNING]  
 > Please use this tool with care, and remember to use it on a dedicated secure server that is properly isolated from your infrastructure.
 
-The infrastructure is fully containerized with docker, and modules can be deployed on demand. The dashboard is always deployed locally and accessible via port forwarding.
+The infrastructure is fully containerized with docker, and modules can be deployed on demand. The dashboard, the API and MongoDB are always deployed locally. The dashboard is accessible by ssh port forwarding (see [accessing the dashboard](#accessing-the-dashboard) for details).
 
 #### Schema
 
-![Diagram](https://github.com/user-attachments/assets/6db12dcd-816c-4616-aed0-e44a94f2c0e3)
+<img width="1311" height="822" alt="NewDiagram" src="https://github.com/user-attachments/assets/4f1426ef-0354-4c06-93ca-85d9f2aafd53" />
 
----
 
 #### File Tree
 
 ```bash
 -- Melissae
     |-- README.md
+    |-- api
+    |   |-- api.py
+    |   |-- Dockerfile
     |-- dashboard
     |   |-- conf
     |   |   |-- dashboard.conf
@@ -85,9 +98,6 @@ The infrastructure is fully containerized with docker, and modules can be deploy
     |   |   |-- searchDisplay.js
     |   |   |-- searchEngine.js
     |   |   |-- threatintelDisplay.js
-    |   |-- json
-    |   |   |-- logs.json
-    |   |    -- threats.json
     |   |-- search.html
     |   |-- threat-intel.html
     |-- docker-compose.yml
@@ -126,24 +136,48 @@ The infrastructure is fully containerized with docker, and modules can be deploy
     |       |-- server
     |           |-- index.html
     |-- scripts
-        |-- logParser.py
-        |-- threatIntel.py
+      |-- logParser.py
+      |-- threatIntel.py
+      |-- purgeLogs.py
 ```
-
----
 
 #### Workflow
 
-The various module logs are processed by logParser.py, which parses and formats them. In turn, threatIntel.py processes these formatted logs to enrich Threat Intelligence.
+- Honeypots write raw logs to their volumes.
+- `scripts/logParser.py` performs **incremental ingestion**: it keeps per-file offsets/mtimes in Mongo (`ingestion_state`), reads only new log lines, deduplicates with deterministic IDs, and upserts into Mongo (`logs`).
+- `scripts/threatIntel.py` computes verdicts and writes into Mongo (`threats`).
+- The Flask API in `api/api.py` exposes `/api/logs` and `/api/threats` (loopback + restricted CORS).
+- Nginx (dashboard) proxies `/api` and serves the UI; access via basic auth and SSH port-forward.
 
-![Diagram-Workflow](https://github.com/user-attachments/assets/021fa12f-8561-4492-8164-2af032a211fb)
+<img width="1311" height="822" alt="Workflow" src="https://github.com/user-attachments/assets/ef13d9c0-c153-4265-8a4f-7f0245677dbb" />
 
+
+#### Scheduled jobs
+
+- Every minute: [scripts/logParser.py](scripts/logParser.py) normalizes raw module logs into Mongo `logs`.
+- Every minute: [scripts/threatIntel.py](scripts/threatIntel.py) recalculates verdicts into Mongo `threats`.
+- Daily at 00:00: [scripts/purgeLogs.py](scripts/purgeLogs.py) removes benign IoCs unseen for 24h and deletes their associated logs.
+
+These cron entries are added by `./melissae.sh install`.
 
 ---
 
 ## Modules
 The choice of modular, containerized deployment means that contributors can easily develop new modules. 
-There are currently 4 native modules:
+There are currently 5 native honeypot modules and 3 system services. 
+
+**Summary table**
+
+| Type     | Service - Container                               | Port(s)            | Exposure           | Notes |
+|----------|--------------------------------------------------|--------------------|--------------------|-------|
+| Honeypot | melissae_proxy, melissae_apache1, melissae_apache2 | 80                 | Public             | Web stack via Nginx + Apache |
+| Honeypot | melissae_ssh                                     | 22                 | Public             | Weak creds by design |
+| Honeypot | melissae_ftp                                     | 21                 | Public             | Weak creds by design |
+| Honeypot | melissae_modbus                                  | 502                | Public             | PLC emulation |
+| Honeypot | melissae_mqtt                                    | 1883               | Public             | Mosquitto |
+| System   | melissae_mongo                                   | 127.0.0.1:27017    | Local      | Data store |
+| System   | melissae_api                        | 127.0.0.1:5000     | Local      | Flask API |
+| System   | melissae_dashboard                     | 127.0.0.1:9999     | Local      | Dashboard |
 
 #### Web
 
@@ -171,12 +205,8 @@ There are currently 4 native modules:
 
 
 - Usage
-  - By default, Melissae provides you a basic configuration for both proxy and web servers containers, those configurations are located in `modules/web/conf`
-  - Add the files you need for the website to be exposed via honeypot in `modules/web/server`
-
-
-
----
+  - By default, Melissae provides you a basic configuration for both proxy and web servers containers, those configurations are located in `modules/web/conf`.
+  - Add the files you need for the website to be exposed via honeypot in `modules/web/server`.
 
 #### SSH
 
@@ -201,9 +231,7 @@ There are currently 4 native modules:
 ```
 
 - Usage
-  - You need to modify your module credentials here : `modules/ssh/Dockerfile` (Default : `user:admin`)
-
----
+  - You need to modify your module credentials here : `modules/ssh/Dockerfile` (Default : `user:admin`).
 
 #### FTP
 
@@ -227,10 +255,8 @@ There are currently 4 native modules:
 ```
 
 - Usage
-  - The shared repository with the ftp container is `modules/ftp/server`
-  - You need to modify your module credentials here : `docker-compose.yml` (Default `ftpuser:ftppass`)
-
----
+  - The shared repository with the ftp container is `modules/ftp/server`.
+  - You need to modify your module credentials here : `docker-compose.yml` (Default `ftpuser:ftppass`).
 
 #### Modbus
 
@@ -260,19 +286,17 @@ There are currently 4 native modules:
 ```
 
 - Features
-  - **Industrial PLC Emulation**: Simulates Siemens S7-1200 and Schneider Electric M340 PLCs
-  - **Randomized Device Identifiers**: Generates unique serial numbers and firmware versions on each startup
-  - **Protocol Detection**: Logs all Modbus function codes (read/write operations)
-  - **Threat Escalation**: Write attempts trigger high-severity threat alerts
+  - **Industrial PLC Emulation**: Simulates Siemens S7-1200 and Schneider Electric M340 PLCs.
+  - **Randomized Device Identifiers**: Generates unique serial numbers and firmware versions on each startup.
+  - **Protocol Detection**: Logs all Modbus function codes (read/write operations).
+  - **Threat Escalation**: Write attempts trigger high-severity threat alerts.
 
 - Usage
-  - **Default Profile**: Siemens S7-1200 (modify in `modules/modbus/Dockerfile` to use `schneider` profile)
-  - **Port**: Standard Modbus TCP port 502
+  - **Default Profile**: Siemens S7-1200 (modify in `modules/modbus/Dockerfile` to use `schneider` profile).
+  - **Port**: Standard Modbus TCP port 502.
   - **Device Profiles**:
-    - **Siemens**: S7-xxxxxx serials, V3.x-V4.x firmware, 1000 registers
-    - **Schneider**: M340-xxxxx-X serials, V2.x-V3.x firmware, 2000 registers
-
----
+    - **Siemens**: S7-xxxxxx serials, V3.x-V4.x firmware, 1000 registers.
+    - **Schneider**: M340-xxxxx-X serials, V2.x-V3.x firmware, 2000 registers.
 
 #### MQTT
 
@@ -306,34 +330,83 @@ There are currently 4 native modules:
 
 ## Threat Intelligence
 
-The Threat Intelligence section of the dashboard provides a simple visual overview of detected threats.  
+The Threat Intelligence section of the dashboard provides a simple visual overview of detected threats backed by MongoDB data served from `/api/threats`.  
 (Really) basic scoring rules have been implemented, but they are intended to be improved in the future.
 See [contributing](#contributing) if you're interested in developing the threat intelligence.
 
-There are 5 different verdicts:
+#### Scoring
 
-- **Benign**: Default verdict. 
-- **Suspicious**: Threat requested the web module > 50 times OR requested the MQTT module > 30 times OR (Attempted to connect using SSH OR FTP) OR Performed Modbus read operations.
-- **Malicious**: Threat successfully connected via SSH OR FTP OR (Performed Modbus write operations AND Failed to connect to SSH OR FTP).
-- **Nefarious**: Threat connected via both SSH AND FTP OR (Performed Modbus write operations AND Successfuly connected via SSH OR FTP).
+There are 3 levels of verdicts (Benign, Suspicious, Malicious) with a blended heuristic:
 
-<img width="1872" height="898" alt="threat" src="https://github.com/user-attachments/assets/1198ff92-0d89-4e96-9380-99dc3e3f3cdd" />
+- **Benign**: Default when no important signals are triggered.
+- **Suspicious**: Moderate signals such as auth failures, HTTP/MQTT/Modbus reconnaissance, or bursty web hits.
+- **Malicious**: Strong signals such as successful SSH/FTP, Modbus writes, sensitive HTTP paths, post-compromise SSH tooling, or combined multi-protocol intrusion patterns.
 
-IoCs can be exported in json.
+Each IP also carries a **protocol-score** and a **confidence** value between 0.20 and 1.00. Confidence scales with the number of distinct signals observed.
 
-**IoC Format**
+<img width="1871" height="975" alt="Threat1" src="https://github.com/user-attachments/assets/5c7b1711-0292-489b-afe8-c0e37ffddcf2" />
+
+
+#### STIX2 Export
+
+- Threat list includes an **Export STIX 2** button.
+- Generates a STIX 2.1 bundle with one indicator per IP (`[ipv4-addr:value = '<ip>']`), carrying verdict and score as custom fields.
+
+#### Killchain timeline
+
+- Click any IP in the Threat list to open a killchain panel.
+- Events are grouped by protocol and summarized with start/end timestamps to keep long attacks readable.
+- Protocol blocks are ordered from oldest to newest using each protocol's last-seen time (or first-seen when only one event exists).
+- Quick actions let you jump to the Search view to inspect the same IP's raw logs.
+
+<img width="1865" height="964" alt="Killchain" src="https://github.com/user-attachments/assets/5567c878-35b8-4633-8ac8-8dc0d786e9f5" />
+
+
+#### Details panel
+
+- In the Threats list, the "Details" button opens a modal showing IP, verdict, score, confidence, timestamps, and the rule reasons from `scripts/threatIntel.py`.
+
+<img width="1868" height="981" alt="Details" src="https://github.com/user-attachments/assets/b60325fe-239b-455b-9e4c-1d120491d036" />
+
+
+**IoC Format (STIX2)**
 
 ```json
-[
-  {
-    "type": "ip",
-    "ip": "192.168.X.X",
-    "protocol-score": 3,
-    "verdict": "suspicious"
-  }
-]
+{
+  "type": "bundle",
+  "id": "bundle--f76e87a3-e0eb-4e93-a030-2322cc220176",
+  "objects": [
+    {
+      "type": "identity",
+      "spec_version": "2.1",
+      "id": "identity--1f4b8511-5ffe-4dae-b00c-360a23d427df",
+      "created": "2026-01-07T13:36:58.169Z",
+      "modified": "2026-01-07T13:36:58.169Z",
+      "name": "Melissae",
+      "identity_class": "organization"
+    },
+    {
+      "type": "indicator",
+      "spec_version": "2.1",
+      "id": "indicator--489ec158-0a7d-402e-be14-515382184c75",
+      "created": "2026-01-07T13:36:58.169Z",
+      "modified": "2026-01-07T13:36:58.169Z",
+      "name": "Melissae IOC X.X.X.X",
+      "description": "malicious IP detected on a Melissae honeypot endpoint with a score of 4",
+      "labels": [
+        "malicious-activity",
+        "malicious"
+      ],
+      "pattern_type": "stix",
+      "pattern": "[ipv4-addr:value = 'X.X.X.X']",
+      "valid_from": "2026-01-07T13:36:58.169Z",
+      "created_by_ref": "identity--1f4b8511-5ffe-4dae-b00c-360a23d427df",
+      "x_melissae_verdict": "malicious",
+      "x_melissae_score": 4
+    }
+  ]
+}
 ```
-
 
 ---
 
@@ -341,8 +414,9 @@ IoCs can be exported in json.
 
 #### Main Features
 
+- **Backed by the API**: Logs are loaded from `/api/logs` (MongoDB).
 - **Search with logical operators**: Use operators to combine multiple criteria in your search.
-- **Field-specific filters**: Search within specific fields like user, ip, protocol, date, hour, action, user-agent, or path using the syntax field:value
+- **Field-specific filters**: Search within specific fields like user, ip, protocol, date, hour, action, user-agent, or path using the syntax field:value.
 - **Global search**: If no field is specified, the search applies to all log fields.
 - **Export results**: A button allows exporting the filtered logs.
 
@@ -364,7 +438,10 @@ user:admin or not path:/login
 protocol:modbus and action:read
 ```
 
-<img width="1871" height="901" alt="search" src="https://github.com/user-attachments/assets/164f92a1-3c11-44a0-9bed-e73012c320b1" />
+<img width="1864" height="986" alt="Logs1" src="https://github.com/user-attachments/assets/fd4447a1-56f1-4b34-8b66-bbabd1ff6a34" />
+
+<img width="1863" height="976" alt="Logs2" src="https://github.com/user-attachments/assets/c9374c52-56bb-4b62-b68f-d56ac5bff6ee" />
+
 
 #### Limitations
 
@@ -395,6 +472,11 @@ Install Melissae :
 ./melissae.sh install
 ```
 
+The installer will prompt you to set dashboard basic-auth credentials (stored hashed with bcrypt in dashboard/conf/htpasswd and). 
+Keep these for UI/API access via the dashboard.
+
+It also seeds cron entries for data hygiene: `scripts/logParser.py` and `scripts/threatIntel.py` run every minute, and `scripts/purgeLogs.py` runs daily at 00:00. Adjust with `crontab -e` if you want different cadences.
+
 Add your user in the docker group :
 
 ```bash
@@ -402,15 +484,12 @@ sudo su
 usermod -aG docker your_username
 ```
 
-> [!NOTE]  
-> After adding the user to the docker group, you will likely need to reconnect via SSH using the generated port that was provided to you. You can connect directly with the command provided in "[accessing the Dashboard](#accessing-the-dashboard)"
-
----
+> [!IMPORTANT]  
+> After adding the user to the docker group, you will likely need to reconnect via SSH using the generated port that was provided to you. You can connect directly with the command provided in "[accessing the Dashboard](#accessing-the-dashboard)".
 
 #### Starting up the stack
 
-> [!IMPORTANT]  
-> Before launching your stack, don't forget to check the modules usage here : [Modules](#modules)
+Before launching your stack, don't forget to check the modules usage here : [Modules](#modules).
 
 **Start your stack**
 
@@ -432,39 +511,74 @@ Examples:
 ./melissae.sh start modbus
 ```
     
-Your stack should now be deployed.
+Your stack should now be deployed. The helper script automatically brings up the dashboard, MongoDB and the API alongside any honeypot modules you select.
 If you are already connected with the port forwarding activated, your dashboard is accessible on : 
 
 `http://localhost:8080`
 
-But if you didn't, and you want to access the dashboard, go to "[Accessing the Dashboard](#accessing-the-dashboard)"
-
----
+If not, see "[Accessing the Dashboard](#accessing-the-dashboard)" to enable SSH port forwarding.
 
 #### Accessing the dashboard
 
 Connect to your server with this command and the newly generated port. 
-This command will allow you to forward the dashboard to your localhost. 
+This command will allow you to forward the dashboard to your localhost (dashboard listens on 127.0.0.1:9999 inside the server; adjust the local port if 8080 is already in use). 
 
 ```bash
 ssh -L 8080:localhost:9999 user@server -p new_port
 ```
 
-Then access the dasboard in your browser :
+[Start the stack](#starting-up-the-stack) and access the dashboard in your browser :
 
 `http://localhost:8080/`
 
-<img width="1871" height="900" alt="dashboard" src="https://github.com/user-attachments/assets/7dd54f49-faaa-4dc8-918d-246784a545eb" />
+Use the credentials you set during installation when prompted by the browser.
 
----
+<img width="1873" height="978" alt="Dashboard1" src="https://github.com/user-attachments/assets/75eee721-3f96-4376-94c9-0b3b306b8a32" />
 
-#### Destroying the stack
+<img width="1867" height="979" alt="Dashboard2" src="https://github.com/user-attachments/assets/d4c79418-ed82-44c8-a088-50205e71d92c" />
+
+
+#### List deployed modules
+
+You can list deployed modules with :
+
+```bash
+./melissae.sh list
+
+[*] Honeypot modules
+
+Module       Service                State   
+---------------------------------------------
+mqtt         melissae_mqtt          ❌     
+web          melissae_apache1       ❌     
+web          melissae_apache2       ❌     
+web          melissae_proxy         ❌     
+ssh          melissae_ssh           ✅     
+ftp          melissae_ftp           ✅     
+modbus       melissae_modbus        ❌     
+
+[*] System modules
+
+Module       Service                State   
+---------------------------------------------
+mongodb      melissae_mongo         ✅     
+api          melissae_api           ✅     
+dashboard    melissae_dashboard     ✅
+```
+
+#### Destroy the stack
 
 You can destroy your stack easily with :
 
 ```bash
 ./melissae.sh destroy
 ```
+#### CLI reference
+
+- `./melissae.sh install`: Install prerequisites, Docker stack, cron jobs, and dashboard auth.
+- `./melissae.sh start [modules]`: Start selected modules (`all`, `web`, `ssh`, `ftp`, `modbus`, `mqtt`).
+- `./melissae.sh list`: Show running/deployed modules and status.
+- `./melissae.sh destroy`: Stop and remove containers.
 
 ---
 
@@ -477,11 +591,14 @@ Discord : https://discord.gg/RXWn85cnYm
 Priority Tasks :
 
  - [x] **Modbus Industrial Honeypot Module** - Complete TCP honeypot with PLC emulation
- - [ ] MQTT module should be improved
- - [ ] New modules need to be developed (SNMP, etc.)
+ - [ ] Improve MQTT module
+ - [ ] Develop new modules (SNMP, etc.)
  - [ ] Improve the search engine
- - [ ] Threat Intelligence must be developed (enrichment from threat intel feeds for example)
- - [ ] Developing multi-instance capabilities
+ - [ ] Improve the Threat Intel pipeline (enrichment from threat intel feeds for example)
+ - [ ] Develop multi-instance capabilities
+ - [ ] Build a lightweight rules UI to tune thresholds (HTTP burst, auth failures, Modbus writes) without redeploying.
+
+---
 
 ## Credits
 
