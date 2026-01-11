@@ -1,29 +1,60 @@
 services:
 
+  melissae_mongo:
+    image: mongo:4.4
+    container_name: melissae_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+
+  melissae_api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: melissae_api
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=mongodb://melissae_mongo:27017
+      - MONGO_DB=melissae
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      - melissae_mongo
+
   melissae_dashboard: 
     image: nginx:latest 
-    container_name: melissae_dashboard 
+    container_name: melissae_dashboard
+    restart: unless-stopped
     ports: 
       - "127.0.0.1:9999:80" 
     volumes: 
       - ./dashboard:/usr/share/nginx/html:ro
       - ./dashboard/conf/dashboard.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dashboard/conf/htpasswd:/etc/nginx/.htpasswd:ro
+    depends_on:
+      - melissae_api
+      - melissae_mongo
     
   melissae_apache1:
     build:
       context: .
       dockerfile: modules/web/Dockerfile
     container_name: melissae_apache1
+    restart: unless-stopped
 
   melissae_apache2:
     build:
       context: .
       dockerfile: modules/web/Dockerfile
     container_name: melissae_apache2
+    restart: unless-stopped
 
   melissae_proxy:
     image: nginx:latest
     container_name: melissae_proxy
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
@@ -36,6 +67,7 @@ services:
   melissae_ftp:
     image: fauria/vsftpd
     container_name: melissae_ftp
+    restart: unless-stopped
     ports:
       - "21:21"
     environment:
@@ -53,6 +85,7 @@ services:
       context: .
       dockerfile: modules/ssh/Dockerfile
     container_name: melissae_ssh
+    restart: unless-stopped
     hostname: ubuntu-server
     ports:
       - "22:22"
@@ -64,6 +97,7 @@ services:
       context: .
       dockerfile: modules/modbus/Dockerfile
     container_name: melissae_modbus
+    restart: unless-stopped
     ports:
       - "502:502"
     volumes:
@@ -72,8 +106,12 @@ services:
   melissae_mqtt:
     image: eclipse-mosquitto:latest
     container_name: melissae_mqtt
+    restart: unless-stopped
     ports:
       - "1883:1883"
     volumes:
       - ./modules/mqtt/conf:/mosquitto/config:ro
       - ./modules/mqtt/logs/mosquitto.log:/mosquitto/log/mosquitto.log
+
+volumes:
+  mongo_data:

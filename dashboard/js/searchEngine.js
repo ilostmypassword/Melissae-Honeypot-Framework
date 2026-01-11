@@ -1,9 +1,11 @@
+const API_BASE = '/api';
 export let logs = [];
 
+// Fetch all logs from the API and cache them locally
 export async function loadLogs() {
     try {
-        const response = await fetch('json/logs.json');
-        if (!response.ok) throw new Error('File not found');
+        const response = await fetch(`${API_BASE}/logs`);
+        if (!response.ok) throw new Error(`API error ${response.status}`);
         logs = await response.json();
     } catch (error) {
         console.error("Oh no !", error);
@@ -44,6 +46,7 @@ function matchesTerm(log, term) {
     return isNegation ? !match : match;
 }
 
+// Compare only the hour component between a log entry and a search value
 function checkHourMatch(logHour, searchValue) {
     if (!logHour) return false;
     const logHourPart = logHour.toLowerCase().split(':')[0];
@@ -51,6 +54,7 @@ function checkHourMatch(logHour, searchValue) {
     return logHourPart === searchHour;
 }
 
+// Parse a query into groups and return matching logs with matched terms
 export function searchLogs(query) {
     const termsWithOperators = query.split(/(\bAND\b|\bOR\b)/i);
     const searchGroups = [];
@@ -108,7 +112,7 @@ export function searchLogs(query) {
     return { results: filteredLogs, terms: searchGroups.flatMap(g => g.terms) };
 }
 
-// Search Init
+// Wire up the search UI to execute queries and render results
 export function setupSearch(onResults) {
     function handleSearch() {
         const query = document.getElementById('searchInput').value.trim();

@@ -1,12 +1,16 @@
 import os
 import re
 import json
+import hashlib
 from datetime import datetime
 from typing import List, Dict, Optional
 
+from pymongo import MongoClient, UpdateOne
+from pymongo.errors import PyMongoError
+
 # Paths
 WORKING_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FINAL_OUTPUT = os.path.join(WORKING_DIR, 'dashboard/json/logs.json')
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017')
 
 # Patterns (If you want to create a module, you need to add your patterns here)
 PATTERNS = {
@@ -51,12 +55,88 @@ PATTERNS = {
     }
 }
 
+
+def compute_uid(log: Dict) -> str:
+    """Deterministic identifier to avoid duplicates across runs."""
+    key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'action', 'path', 'user', 'user-agent']
+    payload = {k: log.get(k) for k in key_fields if k in log}
+    serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha1(serialized.encode('utf-8')).hexdigest()
+
+
+def load_ingestion_state() -> Dict[str, Dict]:
+    try:
+        client = MongoClient(MONGO_URI)
+        col = client['melissae']['ingestion_state']
+        doc = col.find_one({'_id': 'logParser'}) or {}
+        return doc.get('files', {})
+    except PyMongoError as e:
+        print(f"[logParser] Mongo state read error: {e}")
+        return {}
+
+
+def save_ingestion_state(file_states: Dict[str, Dict]) -> None:
+    try:
+        client = MongoClient(MONGO_URI)
+        col = client['melissae']['ingestion_state']
+        col.update_one(
+            {'_id': 'logParser'},
+            {'$set': {'files': file_states, 'updated_at': datetime.utcnow()}},
+            upsert=True,
+        )
+    except PyMongoError as e:
+        print(f"[logParser] Mongo state write error: {e}")
+
+
+def read_new_lines(source: str, file_states: Dict[str, Dict]) -> List[str]:
+    """Read only the new portion of a file, keeping offsets in memory."""
+    if not os.path.exists(source):
+        return []
+
+    try:
+        stats = os.stat(source)
+        size = stats.st_size
+        mtime = stats.st_mtime
+        state = file_states.get(source, {})
+        offset = state.get('offset', 0)
+        prev_mtime = state.get('mtime', 0)
+
+        if size < offset or mtime < prev_mtime:
+            offset = 0  # reset on rotation/truncate
+
+        with open(source, 'r', encoding='utf-8') as f:
+            f.seek(offset)
+            lines = f.readlines()
+            new_offset = f.tell()
+
+        file_states[source] = {
+            'offset': new_offset,
+            'mtime': mtime,
+            'size': size,
+        }
+        return lines
+    except OSError as e:
+        print(f"[logParser] Unable to read {source}: {e}")
+        return []
+
+
+def ensure_indexes(col) -> None:
+    try:
+        col.create_index('ip')
+        col.create_index('protocol')
+        col.create_index('date')
+    except PyMongoError as e:
+        print(f"[logParser] Mongo index error: {e}")
+
 # Create log entries (Should be modified in case of adding new modules)
 def create_entry(protocol: str, dt: datetime, ip: str, action: str, path: str = None, user_agent: str = None, user: Optional[str] = None) -> Dict:
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
     entry = {
         "protocol": protocol,
         "date": dt.strftime('%Y-%m-%d'),
         "hour": dt.strftime('%H:%M:%S'),
+        "timestamp": dt.isoformat(sep=' ', timespec='microseconds'),
         "ip": ip,
         "action": action,
     }
@@ -75,10 +155,24 @@ def parse_ssh_auth_line(line: str) -> Optional[Dict]:
     action_match = PATTERNS['ssh_auth']['patterns']['action'].search(line)
     user_match = PATTERNS['ssh_auth']['patterns']['user'].search(line)
 
-    if not all([date_match, ip_match, action_match]):
+    if not ip_match or not action_match:
         return None
 
-    dt = datetime.strptime(date_match.group('date'), "%Y-%m-%dT%H:%M:%S.%f%z")
+    dt: Optional[datetime] = None
+    if date_match:
+        dt = datetime.strptime(date_match.group('date'), "%Y-%m-%dT%H:%M:%S.%f%z").replace(tzinfo=None)
+    else:
+        syslog_date = re.match(r'^(?P<month>\w{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})', line)
+        if syslog_date:
+            year = datetime.utcnow().year
+            month = syslog_date.group('month')
+            day = syslog_date.group('day')
+            time_str = syslog_date.group('time')
+            dt = datetime.strptime(f"{year} {month} {day} {time_str}", "%Y %b %d %H:%M:%S")
+
+    if not dt:
+        return None
+
     ip = ip_match.group('ip')
     action = action_match.group('action')
     user = user_match.group('user') if user_match else None
@@ -94,31 +188,25 @@ def parse_ssh_auth_line(line: str) -> Optional[Dict]:
 
     return create_entry('ssh', dt, ip, action_desc, user=user)
 
-def process_ssh_auth() -> List[Dict]:
+def process_ssh_auth(file_states: Dict[str, Dict]) -> List[Dict]:
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['ssh_auth']['source'])
-    if not os.path.exists(source):
-        return logs
-    with open(source, 'r', encoding='utf-8') as f:
-        for line in f:
-            entry = parse_ssh_auth_line(line)
-            if entry:
-                logs.append(entry)
+    for line in read_new_lines(source, file_states):
+        entry = parse_ssh_auth_line(line)
+        if entry:
+            logs.append(entry)
     return logs
 
-def process_ssh_commands() -> List[Dict]:
+def process_ssh_commands(file_states: Dict[str, Dict]) -> List[Dict]:
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['ssh_commands']['source'])
-    if not os.path.exists(source):
-        return logs
-    with open(source, 'r', encoding='utf-8') as f:
-        for line in f:
-            match = PATTERNS['ssh_commands']['pattern'].match(line.strip())
-            if match:
-                dt = datetime.strptime(match.group('date'), "%Y-%m-%d %H:%M:%S")
-                raw_command = match.group('command').strip()
-                cleaned_command = re.sub(r'^\d+\s+', '', raw_command)
-                logs.append(create_entry('ssh', dt, match.group('ip'), cleaned_command))
+    for line in read_new_lines(source, file_states):
+        match = PATTERNS['ssh_commands']['pattern'].match(line.strip())
+        if match:
+            dt = datetime.strptime(match.group('date'), "%Y-%m-%d %H:%M:%S")
+            raw_command = match.group('command').strip()
+            cleaned_command = re.sub(r'^\d+\s+', '', raw_command)
+            logs.append(create_entry('ssh', dt, match.group('ip'), cleaned_command))
     return logs
 
 # FTP Module parsing & processing
@@ -137,16 +225,13 @@ def parse_ftp_line(line: str) -> Optional[Dict]:
                 return create_entry('ftp', dt, match.group('ip'), status, user=match.group('user'))
     return None
 
-def process_ftp() -> List[Dict]:
+def process_ftp(file_states: Dict[str, Dict]) -> List[Dict]:
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['ftp']['source'])
-    if not os.path.exists(source):
-        return logs
-    with open(source, 'r', encoding='utf-8') as f:
-        for line in f:
-            entry = parse_ftp_line(line)
-            if entry:
-                logs.append(entry)
+    for line in read_new_lines(source, file_states):
+        entry = parse_ftp_line(line)
+        if entry:
+            logs.append(entry)
     return logs
 
 # Web Module parsing & processing
@@ -161,16 +246,13 @@ def parse_http_line(line: str) -> Optional[Dict]:
     user_agent = match.group(6)
     return create_entry('http', dt, ip, action, path, user_agent)
 
-def process_http() -> List[Dict]:
+def process_http(file_states: Dict[str, Dict]) -> List[Dict]:
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['http']['source'])
-    if not os.path.exists(source):
-        return logs
-    with open(source, 'r', encoding='utf-8') as f:
-        for line in f:
-            entry = parse_http_line(line)
-            if entry:
-                logs.append(entry)
+    for line in read_new_lines(source, file_states):
+        entry = parse_http_line(line)
+        if entry:
+            logs.append(entry)
     return logs
 
 # Modbus Module parsing & processing
@@ -194,16 +276,13 @@ def parse_modbus_line(line: str) -> Optional[Dict]:
     
     return create_entry('modbus', dt, ip, action)
 
-def process_modbus() -> List[Dict]:
+def process_modbus(file_states: Dict[str, Dict]) -> List[Dict]:
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['modbus']['source'])
-    if not os.path.exists(source):
-        return logs
-    with open(source, 'r', encoding='utf-8') as f:
-        for line in f:
-            entry = parse_modbus_line(line)
-            if entry:
-                logs.append(entry)
+    for line in read_new_lines(source, file_states):
+        entry = parse_modbus_line(line)
+        if entry:
+            logs.append(entry)
     return logs
 
 # Mosquitto Module parsing & processing
@@ -251,16 +330,14 @@ def parse_mqtt_line(line: str, next_line: Optional[str], client_ip_map: Dict[str
 
     return None
 
-def process_mqtt() -> List[Dict]:
+def process_mqtt(file_states: Dict[str, Dict]) -> List[Dict]:
     logs: List[Dict] = []
     source = os.path.join(WORKING_DIR, PATTERNS['mqtt']['source'])
-    if not os.path.exists(source):
+    lines = read_new_lines(source, file_states)
+    if not lines:
         return logs
 
     client_ip_map: Dict[str, str] = {}
-
-    with open(source, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
 
     i = 0
     while i < len(lines):
@@ -284,27 +361,47 @@ def process_mqtt() -> List[Dict]:
 
     return logs
 
-# Merging logs
-def merge_and_save(all_logs: List[Dict]) -> None:
-    seen = set()
-    unique_logs = []
-    for log in all_logs:
-        log_hash = hash(frozenset(log.items()))
-        if log_hash not in seen:
-            seen.add(log_hash)
-            unique_logs.append(log)
-    unique_logs.sort(key=lambda x: datetime.strptime(f"{x['date']} {x['hour']}", '%Y-%m-%d %H:%M:%S'))
-    os.makedirs(os.path.dirname(FINAL_OUTPUT), exist_ok=True)
-    with open(FINAL_OUTPUT, 'w', encoding='utf-8') as f:
-        json.dump(unique_logs, f, indent=2, ensure_ascii=False)
+# Persist logs incrementally using deterministic IDs
+def upsert_logs(logs: List[Dict]) -> (bool, int):
+    if not logs:
+        return True, 0
+
+    try:
+        client = MongoClient(MONGO_URI)
+        col = client['melissae']['logs']
+        seen_ids = set()
+        bulk_ops = []
+
+        for log in logs:
+            uid = compute_uid(log)
+            if uid in seen_ids:
+                continue
+            seen_ids.add(uid)
+            log['_id'] = uid
+            bulk_ops.append(UpdateOne({'_id': uid}, {'$setOnInsert': log}, upsert=True))
+
+        if not bulk_ops:
+            return True, 0
+
+        result = col.bulk_write(bulk_ops, ordered=False)
+        ensure_indexes(col)
+        return True, result.upserted_count
+    except PyMongoError as e:
+        print(f"[logParser] Mongo write error: {e}")
+        return False, 0
 
 # Main
 if __name__ == "__main__":
+    file_states: Dict[str, Dict] = load_ingestion_state()
     all_logs: List[Dict] = []
-    all_logs.extend(process_ssh_auth())
-    all_logs.extend(process_ssh_commands())
-    all_logs.extend(process_ftp())
-    all_logs.extend(process_http())
-    all_logs.extend(process_modbus())
-    all_logs.extend(process_mqtt())
-    merge_and_save(all_logs)
+
+    all_logs.extend(process_ssh_auth(file_states))
+    all_logs.extend(process_ssh_commands(file_states))
+    all_logs.extend(process_ftp(file_states))
+    all_logs.extend(process_http(file_states))
+    all_logs.extend(process_modbus(file_states))
+    all_logs.extend(process_mqtt(file_states))
+
+    success, inserted = upsert_logs(all_logs)
+    if success:
+        save_ingestion_state(file_states)
