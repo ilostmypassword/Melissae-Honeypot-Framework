@@ -29,29 +29,43 @@
 
 <div class="threat-intel-container">
 
-    <div class="filter-container">
-        <label for="filterType">Filter by Verdict:</label>
-        <select id="filterType">
-            <option value="all">All</option>
-            <option value="benign">Benign</option>
-            <option value="suspicious">Suspicious</option>
-            <option value="malicious">Malicious</option>
-            <option value="nefarious">Nefarious</option>
-        </select>
+    <div class="stats-grid" id="threatStatsGrid"></div>
+
+    <div id="killchainPanel" class="killchain hidden">
+        <div class="killchain-header">
+            <div>
+                <p class="killchain-label">Killchain</p>
+                <h3 id="killchainTitle">Select an IP in the list</h3>
+            </div>
+            <button id="killchainClose" class="killchain-close" aria-label="Fermer la killchain">×</button>
+        </div>
+        <div id="killchainContent" class="killchain-body">
+            <div class="killchain-empty">No IP selected</div>
+        </div>
     </div>
 
-    <div class="stats-grid" id="threatStatsGrid"></div>
+    <div class="malicious-list-container">
+        <div class="malicious-header">
+            <h3>Threat list</h3>
+            <div class="malicious-actions">
+                <div class="verdict-filter">
+                    <label for="filterType">Filter by verdict</label>
+                    <select id="filterType">
+                        <option value="all">All</option>
+                        <option value="benign">Benign</option>
+                        <option value="suspicious">Suspicious</option>
+                        <option value="malicious">Malicious</option>
+                    </select>
+                </div>
+                <button id="exportStixButton" class="export-iocs-button">Export IoCs to STIX 2</button>
+            </div>
+        </div>
+        <ul id="maliciousList"></ul>
+    </div>
 
     <div class="chart-container">
         <h3>Threat Statistics</h3>
         <canvas id="threatChart"></canvas>
-    </div>
-    <div class="malicious-list-container">
-        <div class="malicious-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h3>Threat list</h3>
-            <button id="exportButton" class="export-iocs-button">Export IoCs</button>
-        </div>
-        <ul id="maliciousList"></ul>
     </div>
 </div>
 
