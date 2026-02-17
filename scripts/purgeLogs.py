@@ -41,9 +41,9 @@ def get_last_seen(db, ip: str) -> Optional[datetime]:
         print(f"[purge_iocs] Error fetching logs for {ip}: {e}")
         return None
 
-# Remove benign IoCs unseen for 24h and delete their related logs
-def purge_benign_older_than_24h():
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+# Remove benign IoCs unseen for 1h and delete their related logs
+def purge_benign_older_than_1h():
+    cutoff = datetime.utcnow() - timedelta(hours=1)
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
@@ -70,4 +70,4 @@ def purge_benign_older_than_24h():
 
 # Main
 if __name__ == "__main__":
-    purge_benign_older_than_24h()
+    purge_benign_older_than_1h()
