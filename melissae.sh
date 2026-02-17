@@ -5,7 +5,7 @@ set -uo pipefail
 WORKING_DIRECTORY=$(cd "$(dirname "$0")" && pwd)
 cd "$WORKING_DIRECTORY" || exit 1
 compose_cmd=()
-VERSION="1.0.0"
+VERSION="1.3.0"
 
 HONEYPOT_MODULES=(web ftp ssh modbus mqtt telnet)
 CVE_MODULES=(cve-2026-24061)
