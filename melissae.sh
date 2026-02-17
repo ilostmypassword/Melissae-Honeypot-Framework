@@ -44,7 +44,7 @@ print_banner() {
     ╚═══════════════════════════════════════════════════════════════════════════╝
 EOF
     echo -e "${RESET}"
-    echo -e "       ${CYAN}Honeypot Management Framework${RESET}  ${DIM}v${VERSION}${RESET}"
+    echo -e "       ${CYAN}Melissae Honeypot Framework${RESET}  ${DIM}v${VERSION}${RESET}"
     echo -e "       ${DIM}Type 'help' for available commands${RESET}"
     echo
 }
