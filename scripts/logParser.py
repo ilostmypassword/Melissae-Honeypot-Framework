@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import re
 import json
@@ -52,12 +54,50 @@ PATTERNS = {
             'subscribe_topic': re.compile(r'^\s+(?P<path>\S+)'),
             'publish': re.compile(r"(?P<date>\d+): Received PUBLISH from (?P<user>\S+).*?'(?P<path>[^']+)'.*?$(?P<size>\d+)\s+bytes$")
         }
+    },
+    'telnet_cve_2026_24061': {
+        'source': 'modules/cve/CVE-2026-24061/logs/auth.log',
+        'patterns': {
+            'failed_login': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+FAILED LOGIN.*?from\s+\'(?P<ip>\d+\.\d+\.\d+\.\d+)\'(?:\s+FOR\s+\'(?P<user>[^\']+)\')?'
+            ),
+            'root_login': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+ROOT LOGIN.*?from\s+\'(?P<ip>\d+\.\d+\.\d+\.\d+)\''
+            ),
+            'pam_failure': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+pam_unix\(login:auth\):\s+authentication failure.*?rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)(?:\s+user=(?P<user>\S+))?'
+            ),
+        }
+    },
+    'telnet_cve_2026_24061_commands': {
+        'source': 'modules/cve/CVE-2026-24061/logs/commands.log',
+        'pattern': re.compile(r'(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<ip>\d+\.\d+\.\d+\.\d+) \| (?P<user>\S+) \| (?P<command>.+)')
+    },
+    'telnet': {
+        'source': 'modules/telnet/logs/auth.log',
+        'patterns': {
+            'failed_login': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+FAILED LOGIN.*?from\s+\'(?P<ip>\d+\.\d+\.\d+\.\d+)\'(?:\s+FOR\s+\'(?P<user>[^\']+)\')?'
+            ),
+            'pam_failure': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+pam_unix\(login:auth\):\s+authentication failure.*?rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)(?:\s+user=(?P<user>\S+))?'
+            ),
+            'pam_success': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+pam_unix\(login:auth\):.*?rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)(?:\s+user=(?P<user>\S+))?'
+            ),
+            'session_open': re.compile(
+                r'^(?P<datetime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})\s+\S+\s+login\[\d+\]:\s+pam_unix\(login:session\):\s+session opened for user\s+(?P<user>\S+)'
+            ),
+        }
+    },
+    'telnet_commands': {
+        'source': 'modules/telnet/logs/commands.log',
+        'pattern': re.compile(r'(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<ip>\d+\.\d+\.\d+\.\d+) \| (?P<user>\S+) \| (?P<command>.+)')
     }
 }
 
 
 def compute_uid(log: Dict) -> str:
-    """Deterministic identifier to avoid duplicates across runs."""
     key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'action', 'path', 'user', 'user-agent']
     payload = {k: log.get(k) for k in key_fields if k in log}
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
@@ -69,19 +109,22 @@ def load_ingestion_state() -> Dict[str, Dict]:
         client = MongoClient(MONGO_URI)
         col = client['melissae']['ingestion_state']
         doc = col.find_one({'_id': 'logParser'}) or {}
-        return doc.get('files', {})
+        return doc.get('files', {}), doc.get('telnet_pid_to_ip', {})
     except PyMongoError as e:
         print(f"[logParser] Mongo state read error: {e}")
-        return {}
+        return {}, {}
 
 
-def save_ingestion_state(file_states: Dict[str, Dict]) -> None:
+def save_ingestion_state(file_states: Dict[str, Dict], telnet_pid_to_ip: Dict[str, str] = None) -> None:
     try:
         client = MongoClient(MONGO_URI)
         col = client['melissae']['ingestion_state']
+        update_doc = {'files': file_states, 'updated_at': datetime.utcnow()}
+        if telnet_pid_to_ip is not None:
+            update_doc['telnet_pid_to_ip'] = telnet_pid_to_ip
         col.update_one(
             {'_id': 'logParser'},
-            {'$set': {'files': file_states, 'updated_at': datetime.utcnow()}},
+            {'$set': update_doc},
             upsert=True,
         )
     except PyMongoError as e:
@@ -89,7 +132,6 @@ def save_ingestion_state(file_states: Dict[str, Dict]) -> None:
 
 
 def read_new_lines(source: str, file_states: Dict[str, Dict]) -> List[str]:
-    """Read only the new portion of a file, keeping offsets in memory."""
     if not os.path.exists(source):
         return []
 
@@ -102,7 +144,7 @@ def read_new_lines(source: str, file_states: Dict[str, Dict]) -> List[str]:
         prev_mtime = state.get('mtime', 0)
 
         if size < offset or mtime < prev_mtime:
-            offset = 0  # reset on rotation/truncate
+            offset = 0
 
         with open(source, 'r', encoding='utf-8') as f:
             f.seek(offset)
@@ -128,8 +170,7 @@ def ensure_indexes(col) -> None:
     except PyMongoError as e:
         print(f"[logParser] Mongo index error: {e}")
 
-# Create log entries (Should be modified in case of adding new modules)
-def create_entry(protocol: str, dt: datetime, ip: str, action: str, path: str = None, user_agent: str = None, user: Optional[str] = None) -> Dict:
+def create_entry(protocol: str, dt: datetime, ip: str, action: str, path: str = None, user_agent: str = None, user: Optional[str] = None, cve: Optional[str] = None) -> Dict:
     if dt.tzinfo is not None:
         dt = dt.replace(tzinfo=None)
     entry = {
@@ -146,10 +187,12 @@ def create_entry(protocol: str, dt: datetime, ip: str, action: str, path: str = 
         entry["user-agent"] = user_agent
     if user and user.lower() != 'unknown':
         entry["user"] = user
+    if cve:
+        entry["cve"] = cve
     return entry
 
-# SSH Module parsing & processing
 def parse_ssh_auth_line(line: str) -> Optional[Dict]:
+    """Parse a single SSH auth log line into a structured entry."""
     date_match = PATTERNS['ssh_auth']['patterns']['date'].search(line)
     ip_match = PATTERNS['ssh_auth']['patterns']['ip'].search(line)
     action_match = PATTERNS['ssh_auth']['patterns']['action'].search(line)
@@ -257,6 +300,7 @@ def process_http(file_states: Dict[str, Dict]) -> List[Dict]:
 
 # Modbus Module parsing & processing
 def parse_modbus_line(line: str) -> Optional[Dict]:
+    """Parse a single Modbus log line with optional JSON details."""
     match = PATTERNS['modbus']['pattern'].match(line.strip())
     if not match:
         return None
@@ -277,6 +321,7 @@ def parse_modbus_line(line: str) -> Optional[Dict]:
     return create_entry('modbus', dt, ip, action)
 
 def process_modbus(file_states: Dict[str, Dict]) -> List[Dict]:
+    """Process Modbus honeypot logs."""
     logs = []
     source = os.path.join(WORKING_DIR, PATTERNS['modbus']['source'])
     for line in read_new_lines(source, file_states):
@@ -361,7 +406,103 @@ def process_mqtt(file_states: Dict[str, Dict]) -> List[Dict]:
 
     return logs
 
-# Persist logs incrementally using deterministic IDs
+# Telnet Module parsing & processing
+def parse_syslog_ts(month_str: str, day_str: str, time_str: str) -> datetime:
+    year = datetime.utcnow().year
+    return datetime.strptime(f"{year} {month_str} {day_str} {time_str}", "%Y %b %d %H:%M:%S")
+
+def parse_iso8601_ts(datetime_str: str) -> datetime:
+    dt_part = datetime_str.split('.')[0]
+    return datetime.strptime(dt_part, "%Y-%m-%dT%H:%M:%S")
+
+TELNET_PID_RE = re.compile(r'login\[(?P<pid>\d+)\]:')
+TELNET_RHOST_RE = re.compile(r'rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)')
+
+def process_telnet_lines(lines: List[str], pid_to_ip: Dict[str, str], patterns_key: str = 'telnet', cve: Optional[str] = None) -> List[Dict]:
+    logs = []
+    p = PATTERNS[patterns_key]['patterns']
+    last_ip = None
+
+    for line in lines:
+        line = line.rstrip('\n')
+        
+        pid_match = TELNET_PID_RE.search(line)
+        pid = pid_match.group('pid') if pid_match else None
+        
+        rhost_match = TELNET_RHOST_RE.search(line)
+        if rhost_match:
+            last_ip = rhost_match.group('ip')
+            if pid:
+                pid_to_ip[pid] = last_ip
+
+        if 'root_login' in p:
+            m = p['root_login'].match(line)
+            if m:
+                dt = parse_iso8601_ts(m.group('datetime'))
+                ip = m.group('ip') if 'ip' in m.groupdict() else pid_to_ip.get(pid, last_ip)
+                logs.append(create_entry('telnet', dt, ip, 'Root login successful', user='root', cve=cve))
+                continue
+
+        if 'session_open' in p:
+            m = p['session_open'].match(line)
+            if m:
+                dt = parse_iso8601_ts(m.group('datetime'))
+                user = m.group('user').split('(')[0]
+                ip = pid_to_ip.get(pid, last_ip)
+                logs.append(create_entry('telnet', dt, ip, 'Login successful', user=user))
+                continue
+
+        m = p['failed_login'].match(line)
+        if m:
+            dt = parse_iso8601_ts(m.group('datetime'))
+            user = m.group('user') if 'user' in m.groupdict() and m.group('user') else None
+            logs.append(create_entry('telnet', dt, m.group('ip'), 'Login failed', user=user))
+            continue
+
+        if 'pam_failure' in p:
+            m = p['pam_failure'].match(line)
+            if m and pid:
+                pid_to_ip[pid] = m.group('ip')
+
+    return logs
+
+def process_telnet(file_states: Dict[str, Dict], pid_to_ip: Dict[str, str]) -> List[Dict]:
+    source = os.path.join(WORKING_DIR, PATTERNS['telnet']['source'])
+    lines = list(read_new_lines(source, file_states))
+    return process_telnet_lines(lines, pid_to_ip, patterns_key='telnet')
+
+def process_telnet_commands(file_states: Dict[str, Dict]) -> List[Dict]:
+    logs = []
+    source = os.path.join(WORKING_DIR, PATTERNS['telnet_commands']['source'])
+    for line in read_new_lines(source, file_states):
+        match = PATTERNS['telnet_commands']['pattern'].match(line.strip())
+        if match:
+            dt = datetime.strptime(match.group('date'), "%Y-%m-%d %H:%M:%S")
+            raw_command = match.group('command').strip()
+            cleaned_command = re.sub(r'^\d+\s+', '', raw_command)
+            user = match.group('user')
+            logs.append(create_entry('telnet', dt, match.group('ip'), cleaned_command, user=user))
+    return logs
+
+# CVE-2026-24061 Module parsing & processing
+def process_telnet_cve_2026_24061(file_states: Dict[str, Dict], pid_to_ip: Dict[str, str]) -> List[Dict]:
+    source = os.path.join(WORKING_DIR, PATTERNS['telnet_cve_2026_24061']['source'])
+    lines = list(read_new_lines(source, file_states))
+    return process_telnet_lines(lines, pid_to_ip, patterns_key='telnet_cve_2026_24061', cve='CVE-2026-24061')
+
+def process_telnet_cve_2026_24061_commands(file_states: Dict[str, Dict]) -> List[Dict]:
+    logs = []
+    source = os.path.join(WORKING_DIR, PATTERNS['telnet_cve_2026_24061_commands']['source'])
+    for line in read_new_lines(source, file_states):
+        match = PATTERNS['telnet_cve_2026_24061_commands']['pattern'].match(line.strip())
+        if match:
+            dt = datetime.strptime(match.group('date'), "%Y-%m-%d %H:%M:%S")
+            raw_command = match.group('command').strip()
+            cleaned_command = re.sub(r'^\d+\s+', '', raw_command)
+            user = match.group('user')
+            logs.append(create_entry('telnet', dt, match.group('ip'), cleaned_command, user=user))
+    return logs
+
 def upsert_logs(logs: List[Dict]) -> (bool, int):
     if not logs:
         return True, 0
@@ -392,7 +533,7 @@ def upsert_logs(logs: List[Dict]) -> (bool, int):
 
 # Main
 if __name__ == "__main__":
-    file_states: Dict[str, Dict] = load_ingestion_state()
+    file_states, telnet_pid_to_ip = load_ingestion_state()
     all_logs: List[Dict] = []
 
     all_logs.extend(process_ssh_auth(file_states))
@@ -401,7 +542,11 @@ if __name__ == "__main__":
     all_logs.extend(process_http(file_states))
     all_logs.extend(process_modbus(file_states))
     all_logs.extend(process_mqtt(file_states))
+    all_logs.extend(process_telnet(file_states, telnet_pid_to_ip))
+    all_logs.extend(process_telnet_commands(file_states))
+    all_logs.extend(process_telnet_cve_2026_24061(file_states, telnet_pid_to_ip))
+    all_logs.extend(process_telnet_cve_2026_24061_commands(file_states))
 
     success, inserted = upsert_logs(all_logs)
     if success:
-        save_ingestion_state(file_states)
+        save_ingestion_state(file_states, telnet_pid_to_ip)

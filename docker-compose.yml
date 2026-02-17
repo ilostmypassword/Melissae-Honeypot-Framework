@@ -24,14 +24,14 @@ services:
       - melissae_mongo
 
   melissae_dashboard: 
-    image: nginx:latest 
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
     container_name: melissae_dashboard
     restart: unless-stopped
     ports: 
       - "127.0.0.1:9999:80" 
     volumes: 
-      - ./dashboard:/usr/share/nginx/html:ro
-      - ./dashboard/conf/dashboard.conf:/etc/nginx/conf.d/default.conf:ro
       - ./dashboard/conf/htpasswd:/etc/nginx/.htpasswd:ro
     depends_on:
       - melissae_api
@@ -112,6 +112,64 @@ services:
     volumes:
       - ./modules/mqtt/conf:/mosquitto/config:ro
       - ./modules/mqtt/logs/mosquitto.log:/mosquitto/log/mosquitto.log
+
+  melissae_telnet:
+    build:
+      context: ./modules/telnet
+      dockerfile: Dockerfile
+    container_name: melissae_telnet
+    restart: unless-stopped
+    hostname: ubuntu-server
+    ports:
+      - "23:23"
+    volumes:
+      - ./modules/telnet/logs:/host-logs/telnet
+
+  melissae_cve_2026_24061:
+    build:
+      context: ./modules/cve/CVE-2026-24061
+      dockerfile: Dockerfile
+    container_name: melissae_cve_2026_24061
+    restart: unless-stopped
+    ports:
+      - "23:23"
+    volumes:
+      - ./modules/cve/CVE-2026-24061/logs:/host-logs/telnet
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER 
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /run:rw,noexec,nosuid,size=16m
+      - /var/log:rw,noexec,nosuid,size=32m
+      - /var/run:rw,noexec,nosuid,size=8m
+      - /var/spool/rsyslog:rw,noexec,nosuid,size=8m
+      - /var/lib/rsyslog:rw,noexec,nosuid,size=8m
+      - /root:rw,noexec,nosuid,size=8m
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    networks:
+      - cve_isolated
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+
+networks:
+  cve_isolated:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   mongo_data:
