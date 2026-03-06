@@ -1,4 +1,4 @@
-# Melissae
+# Melissae Honeypot Framework
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/99609143-d9df-43f9-a824-befd98895cb9" alt="Melissae Logo" />
