@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-text-primary font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+    border: 1px solid transparent;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border-light;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1e2d3d transparent;
+  }
+
+  ::selection {
+    background: rgba(124, 58, 237, 0.25);
+    color: #e6edf3;
+  }
+
+  :focus-visible {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-surface-secondary border border-border rounded-xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-200;
+  }
+  .glass-card-hover:hover {
+    @apply border-border-light;
+  }
+
+  .section-title {
+    @apply text-[11px] uppercase tracking-[0.15em] text-text-muted font-semibold;
+  }
+
+  .glow-line {
+    height: 1px;
+    @apply bg-border;
+  }
+
+  .skeleton {
+    @apply rounded-lg animate-shimmer;
+    background: linear-gradient(90deg, #171f2b 25%, #1e2a3a 50%, #171f2b 75%);
+    background-size: 200% 100%;
+  }
+}
+
