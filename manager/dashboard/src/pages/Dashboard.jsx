@@ -566,7 +566,7 @@ function computeStats(logs) {
     if (l.ip) uniqueIPs.add(l.ip)
     if (l.cve) cveLogs++
     const action = l.action?.toLowerCase() || ''
-    if (l.protocol === 'ssh' && action.includes('accepted')) successSSH++
+    if (l.protocol === 'ssh' && (action.includes('accepted') || action.includes('successful'))) successSSH++
     if (l.protocol === 'ftp' && action.includes('successful')) successFTP++
     if (l.protocol === 'telnet' && action.includes('session opened')) successTelnet++
     if (l.protocol === 'modbus' && action.includes('write')) modbusWrites++
@@ -639,4 +639,3 @@ function ErrorState({ message }) {
     </div>
   )
 }
-
