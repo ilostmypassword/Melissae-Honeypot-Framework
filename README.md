@@ -88,27 +88,39 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 
 **Manager Installation**
 ```bash
-git clone https://github.com/ilostmypassword/Melissae.git
-cd Melissae/manager/ && chmod +x melissae-manager.sh
-./melissae-manager.sh
-manager [0 active] > install
-manager [0 active] > start
-manager [3 active] > enroll my-agent 192.168.1.50
+$ git clone https://github.com/ilostmypassword/Melissae.git
+$ cd Melissae/manager/ && chmod +x melissae-manager.sh
+$ ./melissae-manager.sh
+$ manager [0 active] > install
+
+# Add your user to the docker group and reconnect to your server with the new ssh port, then :
+
+$ manager [0 active] > start
+$ manager [3 active] > enroll my-agent 192.168.1.50
 ```
 
 **Agent Installation**
 > [!IMPORTANT]  
 > Deploy agents on dedicated servers, properly isolated from your production infrastructure.
 ```bash
-git clone https://github.com/ilostmypassword/Melissae.git
-cd Melissae/agent/ && chmod +x melissae-agent.sh
-./melissae-agent.sh
-agent:? [0 active] > install https://<manager-ip>:8443 <token>
-agent:my-agent [0 active] > start
+$ git clone https://github.com/ilostmypassword/Melissae.git
+$ cd Melissae/agent/ && chmod +x melissae-agent.sh
+$ ./melissae-agent.sh
+$ agent:? [0 active] > install https://<manager-ip>:8443 <token>
+
+# Add your user to the docker group and reconnect to your server with the new ssh port, then :
+
+$ agent:my-agent [0 active] > list # To list modules
+$ agent:my-agent [0 active] > enable/disable <module> # To configure modules
+$ agent:my-agent [0 active] > start
 ```
 
 **Full installation guide [**here**](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html).**
 
+**Accessing the Dashboard**
+```
+https://<manager-ip>
+```
 ---
 
 ## Documentation
