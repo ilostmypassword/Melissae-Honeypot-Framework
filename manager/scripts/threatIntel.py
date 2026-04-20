@@ -328,7 +328,7 @@ def batch_geolocate(ips: List[str]) -> Dict[str, Dict]:
 
         try:
             req = urllib.request.Request(
-                "https://ip-api.com/batch",
+                "http://ip-api.com/batch",
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
