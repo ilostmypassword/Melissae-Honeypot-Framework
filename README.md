@@ -96,7 +96,7 @@ $ manager [0 active] > install
 # Add your user to the docker group and reconnect to your server with the new ssh port, then :
 
 $ manager [0 active] > start
-$ manager [3 active] > enroll my-agent 192.168.1.50
+$ manager [3 active] > enroll my-agent <agent-ip>
 ```
 
 **Agent Installation**
