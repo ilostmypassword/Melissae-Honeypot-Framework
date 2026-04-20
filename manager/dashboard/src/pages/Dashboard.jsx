@@ -119,7 +119,7 @@ export default function Dashboard() {
 
   const alerts = []
   if (s.cveLogs > 0) alerts.push({ label: 'CVE Exploits', value: s.cveLogs, query: 'cve:CVE' })
-  if (s.successSSH > 0) alerts.push({ label: 'SSH Logins', value: s.successSSH, query: 'action:accepted AND protocol:ssh' })
+  if (s.successSSH > 0) alerts.push({ label: 'SSH Logins', value: s.successSSH, query: 'action:successful AND protocol:ssh' })
   if (s.successFTP > 0) alerts.push({ label: 'FTP Logins', value: s.successFTP, query: 'action:successful AND protocol:ftp' })
   if (s.successTelnet > 0) alerts.push({ label: 'Telnet Logins', value: s.successTelnet, query: 'action:session AND protocol:telnet' })
   if (s.modbusWrites > 0) alerts.push({ label: 'Modbus Writes', value: s.modbusWrites, query: 'action:write AND protocol:modbus' })
