@@ -241,7 +241,7 @@ def api_geoip():
                     [{"query": ip, "fields": "query,countryCode"} for ip in batch]
                 ).encode()
                 req = urllib.request.Request(
-                    "https://ip-api.com/batch",
+                    "http://ip-api.com/batch",
                     data=payload,
                     headers={"Content-Type": "application/json"},
                     method="POST",
