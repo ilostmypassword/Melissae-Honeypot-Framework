@@ -1,0 +1,47 @@
+
+agent_id: "agent-01"
+
+manager:
+  url: "https://manager.example.com:8443"
+  ca_cert: "/etc/melissae/certs/ca.crt"
+
+agent:
+  cert: "/etc/melissae/certs/agent.crt"
+  key: "/etc/melissae/certs/agent.key"
+  health_port: 8444
+
+push:
+  interval_seconds: 10
+  batch_size: 500
+  retry_max_seconds: 300
+
+buffer:
+  db_path: "/var/lib/melissae/buffer.db"
+  max_size_mb: 512
+
+logs_dir: "/logs"
+state_path: "/var/lib/melissae/parser_state.json"
+
+modules:
+  ssh:
+    enabled: true
+    log_path: "ssh/sshd.log"
+  ftp:
+    enabled: true
+    log_path: "ftp/vsftpd.log"
+  web:
+    enabled: true
+    log_path: "web/access.log"
+  modbus:
+    enabled: true
+    log_path: "modbus/modbus.log"
+  mqtt:
+    enabled: true
+    log_path: "mqtt/mosquitto.log"
+  telnet:
+    enabled: true
+    log_path: "telnet/auth.log"
+  cve-2026-24061:
+    enabled: false
+    log_path: "cve/CVE-2026-24061/auth.log"
+
