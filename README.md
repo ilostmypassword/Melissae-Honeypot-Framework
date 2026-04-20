@@ -107,7 +107,7 @@ agent:? [0 active] > install https://<manager-ip>:8443 <token>
 agent:my-agent [0 active] > start
 ```
 
-**Full installation guide** → [**Getting Started**](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html)
+**Full installation guide [**here**](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html).**
 
 ---
 
