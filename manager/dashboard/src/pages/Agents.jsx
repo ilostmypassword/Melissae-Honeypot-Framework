@@ -91,7 +91,7 @@ export default function Agents() {
   const healthy = agents.filter(a => a.status === 'healthy').length
   const total = agents.length
 
-  const allModules = agents.flatMap(a => a.modules || [])
+  const allModules = agents.flatMap(a => a.last_health?.modules || [])
   const modulesRunning = allModules.filter(m => m.status === 'running').length
   const modulesTotal = allModules.length
 
@@ -140,7 +140,16 @@ function AgentCard({ agent }) {
   const status = agent.status || 'unknown'
   const dotColor = statusColors[status] || 'bg-gray-500'
   const txtColor = statusText[status] || 'text-gray-400'
-  const modules = agent.modules || []
+
+  const health = agent.last_health || {}
+  const modules = health.modules || []
+  const uptime = health.uptime_seconds
+  const version = health.version
+  const pending = health.buffer?.pending_logs
+  const lastPush = health.last_push || agent.last_push
+
+  const running = modules.filter(m => m.status === 'running')
+  const stopped = modules.filter(m => m.status !== 'running')
 
   return (
     <div className="glass-card-hover p-5 space-y-4">
@@ -158,24 +167,37 @@ function AgentCard({ agent }) {
       {/* Info rows */}
       <div className="space-y-2 text-sm">
         <Row label="Host" value={agent.host || '—'} />
-        <Row label="Last Push" value={formatTime(agent.last_push)} />
+        {version && <Row label="Version" value={version} />}
+        {agent.registered_at && <Row label="Registered" value={formatTime(agent.registered_at)} />}
+        <Row label="Last Push" value={formatTime(lastPush)} />
         <Row label="Last Check" value={formatTime(agent.last_check)} />
-        {agent.uptime_seconds != null && (
-          <Row label="Uptime" value={formatUptime(agent.uptime_seconds)} />
-        )}
-        {agent.buffer_pending != null && (
-          <Row label="Buffer Pending" value={String(agent.buffer_pending)} />
+        {uptime != null && <Row label="Uptime" value={formatUptime(uptime)} />}
+        {pending != null && (
+          <Row
+            label="Buffer Pending"
+            value={String(pending)}
+            highlight={pending > 500}
+          />
         )}
       </div>
 
-      {/* Modules */}
+      {/* Services summary */}
       {modules.length > 0 && (
         <div>
-          <p className="section-title mb-2">Modules</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="section-title">Services</p>
+            <span className="text-[10px] text-text-muted font-mono">
+              <span className={running.length === modules.length ? 'text-green-400' : 'text-yellow-400'}>
+                {running.length}
+              </span>
+              /{modules.length} running
+            </span>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {modules.map(m => (
               <span
                 key={m.name}
+                title={`${m.container || m.name} — ${m.status}`}
                 className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                   m.status === 'running'
                     ? 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -186,17 +208,29 @@ function AgentCard({ agent }) {
               </span>
             ))}
           </div>
+          {stopped.length > 0 && (
+            <p className="text-[10px] text-red-400/70 mt-2">
+              ⚠ {stopped.length} stopped: {stopped.map(m => m.name).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* No modules fallback */}
+      {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && (
+        <div className="text-[10px] text-text-muted italic">
+          No module data — waiting for health check
         </div>
       )}
     </div>
   )
 }
 
-function Row({ label, value }) {
+function Row({ label, value, highlight }) {
   return (
     <div className="flex justify-between">
       <span className="text-text-muted">{label}</span>
-      <span className="text-text-secondary font-mono text-xs">{value}</span>
+      <span className={`font-mono text-xs ${highlight ? 'text-yellow-400' : 'text-text-secondary'}`}>{value}</span>
     </div>
   )
 }
