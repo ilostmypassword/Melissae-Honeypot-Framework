@@ -86,8 +86,8 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 
 ## Quick Start
 
+**Manager Installation**
 ```bash
-# Manager
 git clone https://github.com/ilostmypassword/Melissae.git
 cd Melissae/manager/ && chmod +x melissae-manager.sh
 ./melissae-manager.sh
@@ -96,8 +96,10 @@ manager [0 active] > start
 manager [3 active] > enroll my-agent 192.168.1.50
 ```
 
+**Agent Installation**
+> [!IMPORTANT]  
+> Deploy agents on dedicated servers, properly isolated from your production infrastructure.
 ```bash
-# Agent
 git clone https://github.com/ilostmypassword/Melissae.git
 cd Melissae/agent/ && chmod +x melissae-agent.sh
 ./melissae-agent.sh
@@ -105,17 +107,13 @@ agent:? [0 active] > install https://<manager-ip>:8443 <token>
 agent:my-agent [0 active] > start
 ```
 
-> **⚠️** Deploy agents on dedicated servers, properly isolated from your production infrastructure.
-
-Full installation guide → [**Getting Started**](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html)
+**Full installation guide** → [**Getting Started**](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html)
 
 ---
 
 ## Documentation
 
-The complete documentation is hosted on Read the Docs:
-
-<p align="center"><a href="https://melissae-documentation.readthedocs.io"><strong>melissae-documentation.readthedocs.io</strong></a></p>
+The complete documentation is hosted on Read the Docs.
 
 | | Section | |
 |:---:|---------|---------|
