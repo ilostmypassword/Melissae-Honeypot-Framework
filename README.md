@@ -34,18 +34,53 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 
 <br>
 
+<details open>
+<summary><strong>📊 Overview Dashboard</strong></summary>
+<br>
 <p align="center">
-  <img width="420" alt="Dashboard overview" src="https://github.com/user-attachments/assets/24b1101b-5360-4166-9c74-b13c459568aa" />
-  <img width="420" alt="Dashboard statistics" src="https://github.com/user-attachments/assets/2eda0491-d2b4-4ffc-bc5f-0060878f03d3" />
+  <img width="720" alt="Dashboard overview" src="https://github.com/user-attachments/assets/24b1101b-5360-4166-9c74-b13c459568aa" />
 </p>
+</details>
+
+<details>
+<summary><strong>📈 Statistics & Charts</strong></summary>
+<br>
 <p align="center">
-  <img width="420" alt="Agents page" src="https://github.com/user-attachments/assets/c7d6bc68-8f2f-43bf-8bda-0c33e50d95ea" />
-  <img width="420" alt="GeoIP map" src="https://github.com/user-attachments/assets/7032151e-829c-428c-a9ff-621cb7fdc41b" />
+  <img width="720" alt="Dashboard statistics" src="https://github.com/user-attachments/assets/2eda0491-d2b4-4ffc-bc5f-0060878f03d3" />
 </p>
+</details>
+
+<details>
+<summary><strong>🖥️ Agents Management</strong></summary>
+<br>
 <p align="center">
-  <img width="420" alt="Search engine" src="https://github.com/user-attachments/assets/88e8264a-9316-4cbe-8680-5d145729c5a1" />
-  <img width="420" alt="Threat intelligence" src="https://github.com/user-attachments/assets/71742a97-e00b-4cbb-b938-8578c7612f49" />
+  <img width="720" alt="Agents page" src="https://github.com/user-attachments/assets/c7d6bc68-8f2f-43bf-8bda-0c33e50d95ea" />
 </p>
+</details>
+
+<details>
+<summary><strong>🌍 GeoIP Attack Map</strong></summary>
+<br>
+<p align="center">
+  <img width="720" alt="GeoIP map" src="https://github.com/user-attachments/assets/7032151e-829c-428c-a9ff-621cb7fdc41b" />
+</p>
+</details>
+
+<details>
+<summary><strong>🔎 Search Engine</strong></summary>
+<br>
+<p align="center">
+  <img width="720" alt="Search engine" src="https://github.com/user-attachments/assets/88e8264a-9316-4cbe-8680-5d145729c5a1" />
+</p>
+</details>
+
+<details>
+<summary><strong>🎯 Threat Intelligence</strong></summary>
+<br>
+<p align="center">
+  <img width="720" alt="Threat intelligence" src="https://github.com/user-attachments/assets/71742a97-e00b-4cbb-b938-8578c7612f49" />
+</p>
+</details>
 
 ---
 
