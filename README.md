@@ -26,9 +26,9 @@
 
 Melissae is a distributed, modular honeypot framework designed to emulate real-world network services and collect intelligence on attacker behavior. It follows a **manager/agent architecture** where lightweight agents deploy containerized honeypot modules across multiple machines, while a central manager aggregates, scores, and visualizes all captured data.
 
-All communications between agents and the manager are authenticated and encrypted using **mutual TLS (mTLS)** with an embedded PKI based on ECDSA P-384 certificates. Agent enrollment is handled through one-time tokens — no manual certificate exchange required. Each agent parses logs locally, buffers them in SQLite, and pushes normalized JSON to the manager over the secured channel.
+All communications between agents and the manager are authenticated and encrypted using **mutual TLS (mTLS)** with an embedded PKI based on ECDSA P-384 certificates. Agent enrollment is handled through one-time tokens. Each agent parses logs locally, buffers them in SQLite, and pushes normalized JSON to the manager over the secured channel.
 
-The framework ships with **7 honeypot modules** — Web (Nginx + Apache), SSH, FTP, Modbus/ICS, MQTT, Telnet — as well as **CVE-specific modules** that reproduce real vulnerabilities to detect targeted exploitation. Modules run in isolated Docker containers and can be enabled or disabled per agent through the interactive CLI or the configuration file.
+The framework ships with **7 honeypot modules** : Web (Nginx + Apache), SSH, FTP, Modbus/ICS, MQTT, Telnet. As well as **CVE-specific modules** that reproduce real vulnerabilities to detect targeted exploitation. Modules run in isolated Docker containers and can be enabled or disabled per agent through the interactive CLI or the configuration file.
 
 On the manager side, a **continuous scoring engine** evaluates each observed IP on a 0–100 scale using weighted signals (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation) combined with a multi-factor confidence model. Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
 
