@@ -173,31 +173,12 @@ class HealthHandler(BaseHTTPRequestHandler):
             self._json_response(500, {'error': 'Compose command not configured'})
             return
 
-        valid_modules = self._list_valid_modules()
-        if module != 'all' and module not in valid_modules:
-            self._json_response(400, {'error': 'Unknown module'})
-            return
-
         try:
             result = self._exec_compose(compose, action, module)
             self._json_response(200, result)
         except Exception as e:
             log.error(f"Command execution error: {e}")
             self._json_response(500, {'error': str(e)})
-
-    def _list_valid_modules(self) -> set:
-        ls = subprocess.run(
-            ['docker', 'ps', '-a', '--filter', 'name=melissae_',
-             '--format', '{{.Names}}'],
-            capture_output=True, text=True, timeout=10
-        )
-        modules = set()
-        for name in ls.stdout.strip().split('\n'):
-            if not name or name == 'melissae_agent':
-                continue
-            if name.startswith('melissae_'):
-                modules.add(name[len('melissae_'):])
-        return modules
 
     def _exec_compose(self, compose: list, action: str, module: str) -> dict:
         if action == 'status':
@@ -216,20 +197,29 @@ class HealthHandler(BaseHTTPRequestHandler):
                 services.append({'service': name, 'state': status})
             return {'action': 'status', 'services': services}
 
-        targets = []
+
+        ls = subprocess.run(
+            ['docker', 'ps', '-a', '--filter', 'name=melissae_',
+             '--format', '{{.Names}}'],
+            capture_output=True, text=True, timeout=10
+        )
+        known = {n for n in ls.stdout.strip().split('\n')
+                 if n and n != 'melissae_agent'}
+
         if module == 'all':
-            ls = subprocess.run(
-                ['docker', 'ps', '-a', '--filter', 'name=melissae_',
-                 '--format', '{{.Names}}'],
-                capture_output=True, text=True, timeout=10
-            )
-            targets = [n for n in ls.stdout.strip().split('\n')
-                       if n and n != 'melissae_agent']
+            targets = list(known)
         else:
-            targets = [f'melissae_{module}']
+            container_name = f'melissae_{module}'
+            # Validate against the discovered set — targets is built from known,
+            # not from user input, which cuts the taint flow.
+            targets = [n for n in known if n == container_name]
+            if not targets:
+                return {'action': action, 'module': module, 'success': False,
+                        'error': 'Unknown module'}
 
         if not targets:
-            return {'action': action, 'module': module, 'success': True, 'output': 'No matching containers'}
+            return {'action': action, 'module': module, 'success': True,
+                    'output': 'No matching containers'}
 
         if action == 'start':
             cmd = ['docker', 'start'] + targets
