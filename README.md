@@ -154,7 +154,9 @@ The complete documentation is hosted on Read the Docs.
 
 ## Contributing
 
-This project is open to contributions. Join the Discord to get involved:
+This project is open to contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) for details. 
+
+Join the Discord to get involved:
 
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/RXWn85cnYm)
 
