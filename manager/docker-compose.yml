@@ -1,0 +1,51 @@
+services:
+
+  melissae_mongo:
+    image: mongo:4.4
+    container_name: melissae_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+
+  melissae_api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: melissae_api
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=mongodb://melissae_mongo:27017
+      - MONGO_DB=melissae
+    volumes:
+      - ./pki/ca/certs:/certs:ro
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      - melissae_mongo
+
+  melissae_dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: melissae_dashboard
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:8443:8443"
+    volumes:
+      - ./dashboard/conf/htpasswd:/etc/nginx/.htpasswd:ro
+      - ./dashboard/conf/manager-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dashboard/conf/dashboard.conf:/etc/nginx/conf.d/dashboard.conf:ro
+      - ./dashboard/conf/ingestion.conf:/etc/nginx/conf.d/ingestion.conf:ro
+      - ./pki/ca/ca.crt:/etc/nginx/ssl/ca.crt:ro
+      - ./pki/ca/certs/manager/manager.crt:/etc/nginx/ssl/manager.crt:ro
+      - ./pki/ca/certs/manager/manager.key:/etc/nginx/ssl/manager.key:ro
+    depends_on:
+      - melissae_api
+      - melissae_mongo
+
+volumes:
+  mongo_data:
+

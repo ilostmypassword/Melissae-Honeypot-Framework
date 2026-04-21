@@ -3,10 +3,8 @@ import asyncio
 import logging
 import random
 import string
-import socket
 from datetime import datetime
 from typing import Dict
-# Basic Modbus TCP honeypot - no external dependencies needed
 
 LOG_FILE = '/host-logs/modbus/modbus.log'
 
@@ -21,6 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Simulated industrial device identity
 class DeviceProfile:
     def __init__(self, profile_type: str):
         self.profile_type = profile_type
@@ -31,7 +30,7 @@ class DeviceProfile:
     def _generate_serial(self) -> str:
         if self.profile_type == "siemens":
             return f"S7-{random.randint(100000, 999999)}"
-        else:  # schneider
+        else:
             return f"M340-{random.randint(10000, 99999)}-{random.choice(string.ascii_uppercase)}"
     
     def _generate_firmware(self) -> str:
@@ -40,7 +39,7 @@ class DeviceProfile:
             minor = random.randint(0, 9)
             patch = random.randint(0, 99)
             return f"V{major}.{minor}.{patch}"
-        else:  # schneider
+        else:
             return f"V{random.randint(2, 3)}.{random.randint(10, 30)}"
     
     def _create_device_info(self) -> Dict:
@@ -55,7 +54,7 @@ class DeviceProfile:
                 "SerialNumber": self.serial,
                 "DeviceName": f"PLC-{self.serial[-6:]}"
             }
-        else:  # schneider
+        else:
             return {
                 "VendorName": "Schneider Electric",
                 "ProductCode": "M340",
@@ -70,29 +69,30 @@ class DeviceProfile:
     def get_registers(self) -> Dict:
         if self.profile_type == "siemens":
             return {
-                'hr': [0] * 1000,  # Holding registers
-                'ir': [random.randint(0, 100) for _ in range(1000)],  # Input registers
-                'co': [0] * 1000,  # Coils
-                'di': [random.randint(0, 1) for _ in range(1000)]  # Discrete inputs
+                'hr': [0] * 1000,
+                'ir': [random.randint(0, 100) for _ in range(1000)],
+                'co': [0] * 1000,
+                'di': [random.randint(0, 1) for _ in range(1000)]
             }
-        else:  # schneider
+        else:
             return {
-                'hr': [0] * 2000,  # Holding registers
-                'ir': [random.randint(0, 255) for _ in range(2000)],  # Input registers
-                'co': [0] * 2000,  # Coils
-                'di': [random.randint(0, 1) for _ in range(2000)]  # Discrete inputs
+                'hr': [0] * 2000,
+                'ir': [random.randint(0, 255) for _ in range(2000)],
+                'co': [0] * 2000,
+                'di': [random.randint(0, 1) for _ in range(2000)]
             }
 
+# Modbus honeypot with device emulation
 class ModbusHoneypot:
     def __init__(self, device_profile: str = "siemens"):
         self.device = DeviceProfile(device_profile)
         logger.info(f"Initialized {device_profile.upper()} device profile - Serial: {self.device.serial}, Firmware: {self.device.firmware}")
         
-# Device registers for simulation
     def get_device_info_string(self) -> str:
         info = self.device.device_info
         return f"{info['VendorName']} {info['ProductName']} {info['ModelName']} Serial:{info['SerialNumber']} FW:{info['MajorMinorRevision']}"
 
+# Log Modbus TCP client connections
 class ConnectionLogger:
     def __init__(self):
         self.active_connections = set()
@@ -119,10 +119,9 @@ class ConnectionLogger:
                 else:
                     self.log_connection(client_ip, "Connection closed")
 
-# Global connection logger
 connection_logger = ConnectionLogger()
 
-# Simple TCP server to log connections
+# Async Modbus TCP protocol handler
 class ModbusTCPServer:
     def __init__(self, honeypot: ModbusHoneypot):
         self.honeypot = honeypot
@@ -134,14 +133,12 @@ class ModbusTCPServer:
         connection_logger.log_connection(client_ip, "Connection established")
         
         try:
-            # Simple Modbus TCP response simulation
             while True:
                 data = await reader.read(1024)
                 if not data:
                     break
                     
-                # Log the request
-                if len(data) >= 8:  # Minimum Modbus TCP frame
+                if len(data) >= 8:
                     function_code = data[7] if len(data) > 7 else 0
                     
                     function_names = {
@@ -165,8 +162,7 @@ class ModbusTCPServer:
                     else:
                         connection_logger.log_connection(client_ip, f"Unknown request - Function {function_code}")
                 
-                # Send simple response (error response)
-                response = data[:6] + bytes([0x02, 0x83, 0x02])  # Exception response
+                response = data[:6] + bytes([0x02, 0x83, 0x02])
                 writer.write(response)
                 await writer.drain()
                 
@@ -177,6 +173,7 @@ class ModbusTCPServer:
             writer.close()
             await writer.wait_closed()
 
+# Start the Modbus honeypot server
 async def run_server(honeypot: ModbusHoneypot):
     server_instance = ModbusTCPServer(honeypot)
     
@@ -209,3 +206,4 @@ if __name__ == "__main__":
         logger.info("Server stopped by user")
     except Exception as e:
         logger.error(f"Server error: {e}")
+

@@ -26,7 +26,7 @@ RUN echo 'export PROMPT_COMMAND="history -a >( \
     >> /home/user/.bashrc && \
     chown user:user /home/user/.bashrc
 
-RUN echo '#!/bin/bash\nrsyslogd && /usr/sbin/sshd -D' > /usr/local/bin/start-services.sh && \
+RUN printf '#!/bin/bash\nrm -f /run/rsyslogd.pid\ntouch /host-logs/ssh/sshd.log /host-logs/ssh/commands.log\nchmod 666 /host-logs/ssh/sshd.log /host-logs/ssh/commands.log\nrsyslogd\nsleep 1\nexec /usr/sbin/sshd -D\n' > /usr/local/bin/start-services.sh && \
     chmod +x /usr/local/bin/start-services.sh
 
 EXPOSE 22
