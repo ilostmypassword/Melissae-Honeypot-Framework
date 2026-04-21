@@ -38,15 +38,17 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 <summary><strong>📊 Overview Dashboard</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="Dashboard overview" src="https://github.com/user-attachments/assets/24b1101b-5360-4166-9c74-b13c459568aa" />
+  <img width="1817" height="914" alt="screenshot_21042026_104126" src="https://github.com/user-attachments/assets/cb5ee4c9-2710-4165-b9cb-f520ab26f814" />
 </p>
 </details>
+
+
 
 <details>
 <summary><strong>📈 Statistics & Charts</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="Dashboard statistics" src="https://github.com/user-attachments/assets/2eda0491-d2b4-4ffc-bc5f-0060878f03d3" />
+  <img width="1817" height="925" alt="screenshot_21042026_104317" src="https://github.com/user-attachments/assets/e22d8471-272a-4336-9584-714227eb5cbc" />
 </p>
 </details>
 
@@ -54,23 +56,29 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 <summary><strong>🖥️ Agents Management</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="Agents page" src="https://github.com/user-attachments/assets/c7d6bc68-8f2f-43bf-8bda-0c33e50d95ea" />
+  <img width="1820" height="916" alt="screenshot_21042026_104348" src="https://github.com/user-attachments/assets/2b738ee8-3032-4a17-87ae-c8ae0c66859f" />
 </p>
 </details>
+
 
 <details>
 <summary><strong>🌍 GeoIP Attack Map</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="GeoIP map" src="https://github.com/user-attachments/assets/7032151e-829c-428c-a9ff-621cb7fdc41b" />
+  <img width="1821" height="915" alt="screenshot_21042026_104420" src="https://github.com/user-attachments/assets/fe45fbeb-29dc-452e-ab4d-63d7b2b71750" />
+</p>
+<p align="center">
+  <img width="1817" height="912" alt="screenshot_21042026_104451" src="https://github.com/user-attachments/assets/9ffaaf3d-7195-422c-b4aa-60bf2772285c" />
 </p>
 </details>
+
+
 
 <details>
 <summary><strong>🔎 Search Engine</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="Search engine" src="https://github.com/user-attachments/assets/88e8264a-9316-4cbe-8680-5d145729c5a1" />
+  <img width="1815" height="912" alt="screenshot_21042026_104645" src="https://github.com/user-attachments/assets/146e7fab-bdd7-46f2-b52d-cd5d22ba1764" />
 </p>
 </details>
 
@@ -78,7 +86,10 @@ On the manager side, a **continuous scoring engine** evaluates each observed IP 
 <summary><strong>🎯 Threat Intelligence</strong></summary>
 <br>
 <p align="center">
-  <img width="720" alt="Threat intelligence" src="https://github.com/user-attachments/assets/71742a97-e00b-4cbb-b938-8578c7612f49" />
+  <img width="1816" height="913" alt="screenshot_21042026_104521" src="https://github.com/user-attachments/assets/a5ba43c9-e668-404c-bf7f-631c290e9aeb" />
+</p>
+<p align="center">
+  <img width="1817" height="913" alt="screenshot_21042026_104549" src="https://github.com/user-attachments/assets/09ed8e3c-9baa-47fc-821f-b92d5cac41c9" />
 </p>
 </details>
 
