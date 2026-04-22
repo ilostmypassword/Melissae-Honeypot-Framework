@@ -58,7 +58,7 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div className="flex items-center justify-between gap-3 px-5 py-5">
           <div className="flex items-center gap-3 min-w-0">
-            <img src="/logo.png" alt="Melissae" className="h-7 w-auto shrink-0" />
+            <img src="/logo.png" alt="Melissae" className="h-9 w-auto shrink-0" />
             <div className="min-w-0">
               <span className="text-base font-semibold text-text-primary tracking-tight block truncate">
                 Melissae
@@ -134,7 +134,7 @@ export default function Layout({ children }) {
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <img src="/logo.png" alt="Melissae" className="h-6 w-auto" />
+          <img src="/logo.png" alt="Melissae" className="h-8 w-auto" />
           <span className="text-sm font-semibold text-text-primary tracking-tight">Melissae</span>
         </header>
 
