@@ -281,7 +281,7 @@ def start_health_server(config: dict, agent_state: dict):
 def get_container_statuses() -> list:
     try:
         out = subprocess.check_output(
-            ['docker', 'ps', '--format', '{{.Names}}|{{.Status}}', '--filter', 'name=melissae_'],
+            ['docker', 'ps', '--all', '--format', '{{.Names}}|{{.Status}}', '--filter', 'name=melissae_'],
             text=True, timeout=5
         )
         modules = []
