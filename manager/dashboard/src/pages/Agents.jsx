@@ -91,7 +91,8 @@ export default function Agents() {
   const healthy = agents.filter(a => a.status === 'healthy').length
   const total = agents.length
 
-  const allModules = agents.flatMap(a => a.last_health?.modules || [])
+  const reachableAgents = agents.filter(a => a.status !== 'unreachable')
+  const allModules = reachableAgents.flatMap(a => a.last_health?.modules || [])
   const modulesRunning = allModules.filter(m => m.status === 'running').length
   const modulesTotal = allModules.length
 
@@ -140,6 +141,7 @@ function AgentCard({ agent }) {
   const status = agent.status || 'unknown'
   const dotColor = statusColors[status] || 'bg-gray-500'
   const txtColor = statusText[status] || 'text-gray-400'
+  const isUnreachable = status === 'unreachable'
 
   const health = agent.last_health || {}
   const modules = health.modules || []
@@ -152,7 +154,7 @@ function AgentCard({ agent }) {
   const stopped = modules.filter(m => m.status !== 'running')
 
   return (
-    <div className="glass-card-hover p-5 space-y-4">
+    <div className={`glass-card-hover p-5 space-y-4 ${isUnreachable ? 'opacity-70' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -164,6 +166,14 @@ function AgentCard({ agent }) {
         </span>
       </div>
 
+      {/* Unreachable notice */}
+      {isUnreachable && (
+        <div className="flex items-center gap-1.5 text-[10px] text-red-400/80 bg-red-500/5 border border-red-500/15 rounded-md px-2.5 py-1.5">
+          <span>⚠</span>
+          <span>Agent unreachable, data below is from last known check</span>
+        </div>
+      )}
+
       {/* Info rows */}
       <div className="space-y-2 text-sm">
         <Row label="Host" value={agent.host || '—'} />
@@ -171,8 +181,8 @@ function AgentCard({ agent }) {
         {agent.registered_at && <Row label="Registered" value={formatTime(agent.registered_at)} />}
         <Row label="Last Push" value={formatTime(lastPush)} />
         <Row label="Last Check" value={formatTime(agent.last_check)} />
-        {uptime != null && <Row label="Uptime" value={formatUptime(uptime)} />}
-        {pending != null && (
+        {!isUnreachable && uptime != null && <Row label="Uptime" value={formatUptime(uptime)} />}
+        {!isUnreachable && pending != null && (
           <Row
             label="Buffer Pending"
             value={String(pending)}
@@ -186,20 +196,24 @@ function AgentCard({ agent }) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="section-title">Services</p>
-            <span className="text-[10px] text-text-muted font-mono">
-              <span className={running.length === modules.length ? 'text-green-400' : 'text-yellow-400'}>
-                {running.length}
+            {!isUnreachable && (
+              <span className="text-[10px] text-text-muted font-mono">
+                <span className={running.length === modules.length ? 'text-green-400' : 'text-yellow-400'}>
+                  {running.length}
+                </span>
+                /{modules.length} running
               </span>
-              /{modules.length} running
-            </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {modules.map(m => (
               <span
                 key={m.name}
-                title={`${m.container || m.name} — ${m.status}`}
+                title={isUnreachable ? `${m.container || m.name} — unknown (agent unreachable)` : `${m.container || m.name} — ${m.status}`}
                 className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                  m.status === 'running'
+                  isUnreachable
+                    ? 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+                    : m.status === 'running'
                     ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                     : 'bg-red-500/10 text-red-400 border border-red-500/20'
                 }`}
@@ -208,7 +222,7 @@ function AgentCard({ agent }) {
               </span>
             ))}
           </div>
-          {stopped.length > 0 && (
+          {!isUnreachable && stopped.length > 0 && (
             <p className="text-[10px] text-red-400/70 mt-2">
               ⚠ {stopped.length} stopped: {stopped.map(m => m.name).join(', ')}
             </p>
@@ -217,7 +231,7 @@ function AgentCard({ agent }) {
       )}
 
       {/* No modules fallback */}
-      {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && (
+      {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && !isUnreachable && (
         <div className="text-[10px] text-text-muted italic">
           No module data — waiting for health check
         </div>
