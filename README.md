@@ -103,9 +103,8 @@ $ git clone https://github.com/ilostmypassword/Melissae.git
 $ cd Melissae/manager/ && chmod +x melissae-manager.sh
 $ ./melissae-manager.sh
 $ manager [0 active] > install
-
-# Add your user to the docker group and reconnect to your server with the new ssh port, then :
-
+$ sudo usermod -aG docker <username>
+$ newgrp docker
 $ manager [0 active] > start
 $ manager [3 active] > enroll my-agent <agent-ip>
 ```
