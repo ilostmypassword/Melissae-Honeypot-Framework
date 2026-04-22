@@ -229,16 +229,9 @@ _revoke_cert() {
         return 1
     fi
 
-    openssl ca -config "$PKI_DIR/openssl.cnf" \
-        -revoke "$cert_file" \
-        2>/dev/null
+    rm -rf "$CERTS_DIR/$name"
 
-    openssl ca -config "$PKI_DIR/openssl.cnf" \
-        -gencrl \
-        -out "$PKI_DIR/crl.pem" \
-        2>/dev/null
-
-    success "Certificate revoked: $name (CRL updated)"
+    success "Certificate revoked: $name"
 }
 
 # Display available commands and usage
