@@ -107,7 +107,7 @@ export default function DataTable({
 
       {/* Pagination controls */}
       {paginate && data.length > PAGE_SIZES[0] && (
-        <div className="flex items-center justify-between mt-3 text-sm text-text-secondary">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 text-sm text-text-secondary">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-text-muted uppercase tracking-wider">Show</span>
             <select

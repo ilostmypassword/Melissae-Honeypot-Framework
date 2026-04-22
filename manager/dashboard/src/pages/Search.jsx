@@ -122,7 +122,7 @@ export default function Search() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Search Bar */}
-      <div className="glass-card p-4 flex gap-3 flex-wrap items-center">
+      <div className="glass-card p-4 flex flex-col sm:flex-row gap-3 flex-wrap items-stretch sm:items-center">
         <select
           value={agentFilter}
           onChange={e => { setAgentFilter(e.target.value); setResults(null) }}
@@ -139,22 +139,24 @@ export default function Search() {
           onChange={e => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search by IP, User, action... (e.g. protocol:ssh AND action:failed)"
-          className="flex-1 min-w-[240px] px-4 py-2.5 bg-surface-tertiary border border-border rounded-lg text-text-primary placeholder-text-muted text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-all"
+          className="flex-1 min-w-0 px-4 py-2.5 bg-surface-tertiary border border-border rounded-lg text-text-primary placeholder-text-muted text-sm focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none transition-all"
         />
-        <button
-          onClick={handleSearch}
-          className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors"
-        >
-          Search
-        </button>
-        {results && results.length > 0 && (
+        <div className="flex gap-2">
           <button
-            onClick={handleExport}
-            className="px-5 py-2.5 bg-surface-tertiary hover:bg-surface-hover text-text-primary border border-border rounded-lg font-medium text-sm transition-colors"
+            onClick={handleSearch}
+            className="flex-1 sm:flex-none px-5 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors"
           >
-            Export ({results.length} logs)
+            Search
           </button>
-        )}
+          {results && results.length > 0 && (
+            <button
+              onClick={handleExport}
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-surface-tertiary hover:bg-surface-hover text-text-primary border border-border rounded-lg font-medium text-sm transition-colors whitespace-nowrap"
+            >
+              Export ({results.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Results */}
