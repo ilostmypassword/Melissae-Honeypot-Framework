@@ -948,24 +948,11 @@ $cmd"
     success "Cron jobs configured"
 
     echo
-    info "Configuring admin SSH port..."
-    local random_port=$((RANDOM % 10000 + 20000))
-    sudo sed -i '/^Port /s/^/#/' /etc/ssh/sshd_config > /dev/null 2>&1
-    echo "Port $random_port" | sudo tee -a /etc/ssh/sshd_config > /dev/null 2>&1
-    success "SSH admin port: $random_port"
-
-    read -p "Restart SSH now? (yes/no): " answer
-    if [ "$answer" = "yes" ]; then
-        sudo systemctl disable --now ssh.socket > /dev/null 2>&1
-        sudo systemctl restart sshd > /dev/null 2>&1
-        success "SSH restarted"
-    fi
-
-    echo
     success "Manager installation complete!"
     echo
     echo -e "${CYAN}Next steps:${RESET}"
-    echo -e "  1. ${WHITE}sudo usermod -aG docker $USER${RESET} then re-login"
+    echo -e "  1. ${WHITE}sudo usermod -aG docker $USER${RESET}"
+    echo -e "     then run ${WHITE}newgrp docker${RESET} (or re-login) for group changes to take effect"
     echo -e "  2. ${WHITE}start${RESET} to launch manager services"
     echo -e "  3. ${WHITE}enroll <agent-name> <agent-ip>${RESET} to add agents"
     echo -e "  4. Access dashboard at: ${WHITE}https://$manager_ip/${RESET}"
