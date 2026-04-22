@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
 const navSections = [
@@ -26,22 +27,55 @@ const navSections = [
 // Main application layout with sidebar navigation
 export default function Layout({ children }) {
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar on route change (mobile nav)
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
+  // Close sidebar on Escape key
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') setSidebarOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   return (
     <div className="min-h-screen flex">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar */}
-      <nav className="w-[230px] bg-surface-secondary border-r border-border flex flex-col fixed top-0 left-0 h-screen z-50">
+      <nav className={`w-[230px] bg-surface-secondary border-r border-border flex flex-col fixed top-0 left-0 h-screen z-50 transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5">
-          <img src="/logo.png" alt="Melissae" className="h-7 w-auto" />
-          <div>
-            <span className="text-base font-semibold text-text-primary tracking-tight block">
-              Melissae
-            </span>
-            <span className="text-[9px] uppercase tracking-[0.2em] text-text-muted font-medium">
-              Honeypot Framework
-            </span>
+        <div className="flex items-center justify-between gap-3 px-5 py-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/logo.png" alt="Melissae" className="h-7 w-auto shrink-0" />
+            <div className="min-w-0">
+              <span className="text-base font-semibold text-text-primary tracking-tight block truncate">
+                Melissae
+              </span>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-text-muted font-medium">
+                Honeypot Framework
+              </span>
+            </div>
           </div>
+          {/* Close button (mobile only) */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden shrink-0 p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover/50 transition-colors"
+            aria-label="Close menu"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
         </div>
 
         <div className="glow-line mx-4" />
@@ -84,15 +118,30 @@ export default function Layout({ children }) {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-border">
           <p className="text-[9px] text-text-muted uppercase tracking-[0.2em]">
-            v2.0
+            v2.1
           </p>
         </div>
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 ml-[230px] px-6 py-6 max-w-[1440px]">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-[230px]">
+        {/* Mobile topbar */}
+        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-surface-secondary border-b border-border sticky top-0 z-30">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-hover/50 transition-colors"
+            aria-label="Open menu"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <img src="/logo.png" alt="Melissae" className="h-6 w-auto" />
+          <span className="text-sm font-semibold text-text-primary tracking-tight">Melissae</span>
+        </header>
+
+        <main className="flex-1 px-4 py-4 sm:px-6 sm:py-6 min-w-0">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

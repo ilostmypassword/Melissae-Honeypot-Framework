@@ -379,14 +379,14 @@ def _parse_telnet_lines(lines: List[str], pid_to_ip: Dict[str, str],
                 dt = parse_iso8601_ts(m.group('datetime'))
                 user = m.group('user').split('(')[0]
                 ip = pid_to_ip.get(pid, last_ip)
-                logs.append(create_entry('telnet', dt, ip, 'Login successful', user=user, cve=cve))
+                logs.append(create_entry('telnet', dt, ip, 'Login successful', user=user))
                 continue
 
         m = p['failed_login'].match(line)
         if m:
             dt = parse_iso8601_ts(m.group('datetime'))
             user = m.group('user') if 'user' in m.groupdict() and m.group('user') else None
-            logs.append(create_entry('telnet', dt, m.group('ip'), 'Login failed', user=user, cve=cve))
+            logs.append(create_entry('telnet', dt, m.group('ip'), 'Login failed', user=user))
             continue
 
         if 'pam_failure' in p:

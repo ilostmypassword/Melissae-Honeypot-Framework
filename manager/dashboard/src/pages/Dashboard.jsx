@@ -127,8 +127,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header Row: agent selector + date range + refresh */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Dashboard</h1>
           <select
             value={selectedAgent}
@@ -148,7 +148,7 @@ export default function Dashboard() {
               <button
                 key={r.value}
                 onClick={() => setDateRange(r.value)}
-                className={`px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
                   dateRange === r.value
                     ? 'bg-accent/15 text-accent'
                     : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover/30'

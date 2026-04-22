@@ -91,7 +91,8 @@ export default function Agents() {
   const healthy = agents.filter(a => a.status === 'healthy').length
   const total = agents.length
 
-  const allModules = agents.flatMap(a => a.last_health?.modules || [])
+  const reachableAgents = agents.filter(a => a.status !== 'unreachable')
+  const allModules = reachableAgents.flatMap(a => a.last_health?.modules || [])
   const modulesRunning = allModules.filter(m => m.status === 'running').length
   const modulesTotal = allModules.length
 
@@ -140,6 +141,7 @@ function AgentCard({ agent }) {
   const status = agent.status || 'unknown'
   const dotColor = statusColors[status] || 'bg-gray-500'
   const txtColor = statusText[status] || 'text-gray-400'
+  const isUnreachable = status === 'unreachable'
 
   const health = agent.last_health || {}
   const modules = health.modules || []
@@ -152,73 +154,88 @@ function AgentCard({ agent }) {
   const stopped = modules.filter(m => m.status !== 'running')
 
   return (
-    <div className="glass-card-hover p-5 space-y-4">
+    <div className={`glass-card-hover p-5 flex flex-col gap-4 ${isUnreachable ? 'opacity-60' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
-          <span className="font-medium text-text-primary">{agent.agent_id}</span>
+        <div className="flex items-center gap-2.5">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor} ${status === 'healthy' ? 'shadow-[0_0_6px_1px] shadow-green-500/50' : ''}`} />
+          <span className="font-semibold text-sm text-text-primary truncate">{agent.agent_id}</span>
         </div>
-        <span className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${txtColor}`}>
+        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+          status === 'healthy'    ? 'border-green-500/30 bg-green-500/10 text-green-400' :
+          status === 'degraded'   ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400' :
+          status === 'unreachable'? 'border-red-500/30 bg-red-500/10 text-red-400' :
+          'border-gray-500/30 bg-gray-500/10 text-gray-400'
+        }`}>
           {status}
         </span>
       </div>
 
-      {/* Info rows */}
-      <div className="space-y-2 text-sm">
-        <Row label="Host" value={agent.host || '—'} />
-        {version && <Row label="Version" value={version} />}
-        {agent.registered_at && <Row label="Registered" value={formatTime(agent.registered_at)} />}
-        <Row label="Last Push" value={formatTime(lastPush)} />
-        <Row label="Last Check" value={formatTime(agent.last_check)} />
-        {uptime != null && <Row label="Uptime" value={formatUptime(uptime)} />}
-        {pending != null && (
-          <Row
-            label="Buffer Pending"
-            value={String(pending)}
-            highlight={pending > 500}
-          />
+      {/* Unreachable notice */}
+      {isUnreachable && (
+        <div className="flex items-center gap-2 text-[10px] text-red-400/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">
+          <span className="shrink-0">⚠</span>
+          <span>Agent unreachable — data below is from last known check</span>
+        </div>
+      )}
+
+      {/* Info grid */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+        <InfoCell label="Host" value={agent.host || '—'} />
+        {version && <InfoCell label="Version" value={version} />}
+        <InfoCell label="Last check" value={formatTime(agent.last_check)} />
+        <InfoCell label="Last push" value={formatTime(lastPush)} />
+        {agent.registered_at && <InfoCell label="Registered" value={formatTime(agent.registered_at)} />}
+        {!isUnreachable && uptime != null && <InfoCell label="Uptime" value={formatUptime(uptime)} />}
+        {!isUnreachable && pending != null && (
+          <InfoCell label="Buffer" value={String(pending)} highlight={pending > 500} />
         )}
       </div>
 
-      {/* Services summary */}
+      {/* Services */}
       {modules.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="section-title">Services</p>
-            <span className="text-[10px] text-text-muted font-mono">
-              <span className={running.length === modules.length ? 'text-green-400' : 'text-yellow-400'}>
-                {running.length}
+        <div className="border-t border-white/5 pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Services</span>
+            {!isUnreachable && (
+              <span className={`text-[10px] font-mono font-semibold ${
+                stopped.length === 0 ? 'text-green-400' : 'text-yellow-400'
+              }`}>
+                {running.length}/{modules.length}
               </span>
-              /{modules.length} running
-            </span>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {modules.map(m => (
-              <span
-                key={m.name}
-                title={`${m.container || m.name} — ${m.status}`}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                  m.status === 'running'
-                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                }`}
-              >
-                {m.name}
-              </span>
-            ))}
+            {modules.map(m => {
+              const isRunning = m.status === 'running'
+              return (
+                <span
+                  key={m.name}
+                  title={isUnreachable ? `${m.container || m.name} — unknown (agent unreachable)` : `${m.container || m.name} — ${m.status}`}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-colors ${
+                    isUnreachable
+                      ? 'bg-gray-500/8 text-gray-500 border-gray-500/15'
+                      : isRunning
+                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                      : 'bg-gray-500/10 text-gray-500 border-gray-500/20 line-through decoration-gray-600'
+                  }`}
+                >
+                  {m.name}
+                </span>
+              )
+            })}
           </div>
-          {stopped.length > 0 && (
-            <p className="text-[10px] text-red-400/70 mt-2">
-              ⚠ {stopped.length} stopped: {stopped.map(m => m.name).join(', ')}
+          {!isUnreachable && stopped.length > 0 && (
+            <p className="text-[10px] text-yellow-400/70">
+              {stopped.length} stopped: {stopped.map(m => m.name).join(', ')}
             </p>
           )}
         </div>
       )}
 
       {/* No modules fallback */}
-      {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && (
-        <div className="text-[10px] text-text-muted italic">
+      {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && !isUnreachable && (
+        <div className="text-[10px] text-text-muted italic border-t border-white/5 pt-3">
           No module data — waiting for health check
         </div>
       )}
@@ -226,11 +243,11 @@ function AgentCard({ agent }) {
   )
 }
 
-function Row({ label, value, highlight }) {
+function InfoCell({ label, value, highlight }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-text-muted">{label}</span>
-      <span className={`font-mono text-xs ${highlight ? 'text-yellow-400' : 'text-text-secondary'}`}>{value}</span>
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[9px] uppercase tracking-wider text-text-muted font-medium">{label}</span>
+      <span className={`font-mono text-[11px] truncate ${highlight ? 'text-yellow-400' : 'text-text-secondary'}`}>{value}</span>
     </div>
   )
 }

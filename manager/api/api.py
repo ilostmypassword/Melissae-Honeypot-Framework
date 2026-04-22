@@ -146,6 +146,13 @@ def api_ingest():
     if agent_id != client_cn:
         return jsonify({"error": "agent_id does not match certificate CN"}), 403
 
+    try:
+        db = get_db()
+        if not db["agents"].find_one({"agent_id": agent_id}, {"_id": 1}):
+            return jsonify({"error": "Agent not registered"}), 403
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
     if not isinstance(batch, list):
         return jsonify({"error": "batch must be an array"}), 400
 

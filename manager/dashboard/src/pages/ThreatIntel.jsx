@@ -190,9 +190,9 @@ export default function ThreatIntel() {
             </div>
             <button
               onClick={handleExportStix}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium text-sm transition-colors uppercase tracking-wide"
+              className="px-3 py-1.5 bg-surface-tertiary hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border rounded-lg text-[11px] font-semibold transition-colors uppercase tracking-wide"
             >
-              Export IoCs to STIX 2
+              Export STIX 2
             </button>
           </div>
         </div>
