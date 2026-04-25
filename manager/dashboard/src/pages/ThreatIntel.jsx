@@ -227,7 +227,7 @@ export default function ThreatIntel() {
 function ThreatChart({ stats }) {
   const verdicts = ['benign', 'suspicious', 'malicious']
   const data = [stats.benign, stats.suspicious, stats.malicious]
-  const colors = ['#22c55e', '#f59e0b', '#ef4444']
+  const colors = ['#4ade80', '#fbbf24', '#f87171']
 
   return (
     <Bar

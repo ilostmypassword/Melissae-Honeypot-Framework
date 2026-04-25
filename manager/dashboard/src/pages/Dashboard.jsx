@@ -307,13 +307,13 @@ function DailyChart({ logs, onDayClick }) {
         datasets: [{
           label: 'Logs',
           data,
-          borderColor: '#7c3aed',
-          backgroundColor: 'rgba(124, 58, 237, 0.06)',
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.06)',
           borderWidth: 2,
           fill: true,
           tension: 0.4,
           pointRadius: data.length > 30 ? 0 : 3,
-          pointBackgroundColor: '#7c3aed',
+          pointBackgroundColor: '#6366f1',
           pointBorderColor: '#111820',
           pointBorderWidth: 2,
           pointHoverRadius: 5,
@@ -356,8 +356,8 @@ function ActivityChart({ logs, onHourClick }) {
         labels: hours,
         datasets: [{
           data,
-          backgroundColor: 'rgba(124, 58, 237, 0.25)',
-          borderColor: '#7c3aed',
+          backgroundColor: 'rgba(99, 102, 241, 0.20)',
+          borderColor: '#6366f1',
           borderWidth: 1,
           borderRadius: 4,
         }],
@@ -416,7 +416,7 @@ function Heatmap({ logs }) {
                   <div
                     key={h}
                     className="flex-1 h-[18px] rounded-[2px] transition-colors"
-                    style={{ backgroundColor: val === 0 ? 'rgba(255,255,255,0.02)' : `rgba(124, 58, 237, ${0.12 + intensity * 0.7})` }}
+                    style={{ backgroundColor: val === 0 ? 'rgba(255,255,255,0.02)' : `rgba(99, 102, 241, ${0.12 + intensity * 0.65})` }}
                     title={`${days[dow]} ${String(h).padStart(2, '0')}:00 — ${val} logs`}
                   />
                 )
@@ -433,7 +433,7 @@ function Heatmap({ logs }) {
 function ProtocolChart({ logs, onClick }) {
   const protocols = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
   const counts = protocols.map(p => logs.filter(l => l.protocol === p).length)
-  const colors = ['#22d3ee', '#f472b6', '#a3e635', '#c084fc', '#fb923c', '#f43f5e']
+  const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af']
 
   return (
     <Doughnut
@@ -453,7 +453,7 @@ function ProtocolChart({ logs, onClick }) {
 // Events per agent bar chart
 function AgentBarChart({ logs, agentIds, onAgentClick }) {
   const counts = agentIds.map(id => logs.filter(l => l.agent_id === id).length)
-  const colors = ['#22d3ee', '#f472b6', '#a3e635', '#c084fc', '#fb923c', '#f43f5e', '#818cf8', '#34d399']
+  const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af', '#818cf8', '#6ee7b7']
 
   return (
     <Bar
