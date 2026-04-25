@@ -29,7 +29,7 @@ modules:
   ftp:
     enabled: true
     log_path: "ftp/vsftpd.log"
-  web:
+  http:
     enabled: true
     log_path: "web/access.log"
   modbus:
