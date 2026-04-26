@@ -18,6 +18,8 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://melissae_mongo:27017")
 DB_NAME = os.getenv("MONGO_DB", "melissae")
 
 MAX_BATCH_SIZE = 500
+MAX_RESULTS_LOGS = 5000
+MAX_RESULTS_THREATS = 2000
 
 REQUIRED_LOG_FIELDS = {"protocol", "date", "ip", "action"}
 
@@ -52,7 +54,12 @@ def api_logs():
         agent_id = request.args.get("agent_id")
         if agent_id:
             query["agent_id"] = _sanitize_str(agent_id, 64)
-        data = list(db["logs"].find(query, {"_id": 0}))
+        try:
+            limit = max(1, min(int(request.args.get("limit", MAX_RESULTS_LOGS)), MAX_RESULTS_LOGS))
+            skip = max(0, int(request.args.get("skip", 0)))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid pagination parameters"}), 400
+        data = list(db["logs"].find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit))
         return jsonify(data)
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
@@ -66,7 +73,12 @@ def api_threats():
         agent_id = request.args.get("agent_id")
         if agent_id:
             query["agents"] = _sanitize_str(agent_id, 64)
-        data = list(db["threats"].find(query, {"_id": 0}))
+        try:
+            limit = max(1, min(int(request.args.get("limit", MAX_RESULTS_THREATS)), MAX_RESULTS_THREATS))
+            skip = max(0, int(request.args.get("skip", 0)))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid pagination parameters"}), 400
+        data = list(db["threats"].find(query, {"_id": 0}).skip(skip).limit(limit))
         return jsonify(data)
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
