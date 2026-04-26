@@ -31,6 +31,6 @@
 
 1. Fork and create a branch (`feat/my-module`)
 2. Test end-to-end: install, enroll an agent, enable the module, check the dashboard
-3. Open a PR against `v2.1` with a short description, the protocol/port used, and a sample log entry
+3. Open a PR against `v2.2` with a short description, the protocol/port used, and a sample log entry
 
 For large changes, open an issue first to align on the approach.
