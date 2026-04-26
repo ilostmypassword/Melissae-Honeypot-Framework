@@ -12,19 +12,19 @@ const navSections = [
   {
     label: 'Statistics',
     items: [
-      { to: '/stats/activity', label: 'Activity', icon: ActivityIcon },
+      { to: '/stats/activity', label: 'Traffic', icon: ActivityIcon },
       { to: '/stats/attackers', label: 'Attackers', icon: AttackerIcon },
     ],
   },
   {
-    label: 'Analysis',
+    label: 'Explore',
     items: [
       { to: '/search', label: 'Search', icon: SearchIcon },
-      { to: '/map', label: 'Map', icon: MapIcon },
+      { to: '/map', label: 'Geo Map', icon: MapIcon },
     ],
   },
   {
-    label: 'Intelligence',
+    label: 'Intel',
     items: [
       { to: '/threats', label: 'Threat Intel', icon: ThreatIcon },
     ],
