@@ -1,13 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-  Legend,
-} from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 import { fetchThreats } from '../api'
 import StatCard from '../components/StatCard'
@@ -16,8 +8,6 @@ import DataTable from '../components/DataTable'
 import KillchainPanel from '../components/KillchainPanel'
 import ThreatDetailModal from '../components/ThreatDetailModal'
 import { buildStixBundle, downloadJson } from '../stix'
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
 function getSeverityScore(t) {
   if (Number.isFinite(t['protocol-score'])) return t['protocol-score']
@@ -171,7 +161,7 @@ export default function ThreatIntel() {
       {/* Threat List */}
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h3 className="section-title">Threat list</h3>
+          <h3 className="section-title">Threat List</h3>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <label className="text-sm text-text-muted font-medium">
