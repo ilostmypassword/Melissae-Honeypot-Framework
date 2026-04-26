@@ -178,20 +178,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Protocol Breakdown Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {PROTOCOL_META.map(({ key, label, color }) => (
-          <button
-            key={key}
-            onClick={() => goSearch(`protocol:${key}`)}
-            className="glass-card p-4 text-left hover:ring-1 hover:ring-border/60 transition-all"
-          >
-            <div className="text-2xl font-bold font-mono" style={{ color }}>{formatNumber(s.protocols[key])}</div>
-            <div className="text-xs text-text-muted mt-1.5 uppercase tracking-wide font-medium">{label}</div>
-          </button>
-        ))}
-      </div>
-
       {/* Protocol Timeline */}
       <div className="glass-card p-5">
         <h3 className="section-title mb-4">Protocol Timeline</h3>
