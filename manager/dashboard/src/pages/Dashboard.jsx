@@ -135,7 +135,7 @@ export default function Dashboard() {
         <div className="relative overflow-hidden rounded-xl border border-verdict-malicious/25 bg-verdict-malicious/[0.04]">
           {/* Left accent stripe */}
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-verdict-malicious rounded-l-xl" />
-          <div className="pl-5 pr-4 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="pl-4 pr-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2.5">
             {/* Icon + title */}
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="relative flex h-2 w-2">
