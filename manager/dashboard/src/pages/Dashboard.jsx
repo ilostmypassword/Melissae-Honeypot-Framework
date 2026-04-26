@@ -161,7 +161,6 @@ export default function Dashboard() {
                 >
                   <span className="text-sm font-bold font-mono text-verdict-malicious">{formatNumber(a.value)}</span>
                   <span className="text-xs text-verdict-malicious/80 group-hover:text-verdict-malicious transition-colors">{a.label}</span>
-                  <svg className="w-3 h-3 text-verdict-malicious/40 group-hover:text-verdict-malicious/70 transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </button>
               ))}
             </div>
