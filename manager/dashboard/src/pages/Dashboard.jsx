@@ -2,10 +2,18 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchAgents } from '../api'
 import StatCard from '../components/StatCard'
-import { DailyChart, ProtocolChart } from '../components/charts'
+import { DailyChart, ProtocolChart, ProtocolTimelineChart } from '../components/charts'
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 
 const REFRESH_INTERVAL = 30_000
+const PROTOCOL_META = [
+  { key: 'ssh',    label: 'SSH',    color: '#38bdf8' },
+  { key: 'ftp',    label: 'FTP',    color: '#f9a8d4' },
+  { key: 'http',   label: 'HTTP',   color: '#86efac' },
+  { key: 'modbus', label: 'Modbus', color: '#a78bfa' },
+  { key: 'mqtt',   label: 'MQTT',   color: '#fdba74' },
+  { key: 'telnet', label: 'Telnet', color: '#fda4af' },
+]
 const DATE_RANGES = [
   { label: 'Today', value: 'today' },
   { label: '7 days', value: '7d' },
@@ -167,6 +175,28 @@ export default function Dashboard() {
           <div className="max-w-[220px] mx-auto">
             <ProtocolChart logs={filteredLogs} onClick={p => goSearch(`protocol:${p}`)} />
           </div>
+        </div>
+      </div>
+
+      {/* Protocol Breakdown Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {PROTOCOL_META.map(({ key, label, color }) => (
+          <button
+            key={key}
+            onClick={() => goSearch(`protocol:${key}`)}
+            className="glass-card p-4 text-left hover:ring-1 hover:ring-border/60 transition-all"
+          >
+            <div className="text-2xl font-bold font-mono" style={{ color }}>{formatNumber(s.protocols[key])}</div>
+            <div className="text-xs text-text-muted mt-1.5 uppercase tracking-wide font-medium">{label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Protocol Timeline */}
+      <div className="glass-card p-5">
+        <h3 className="section-title mb-4">Protocol Timeline</h3>
+        <div className="h-[220px]">
+          <ProtocolTimelineChart logs={filteredLogs} />
         </div>
       </div>
     </div>

@@ -288,6 +288,106 @@ export function TopCredentials({ logs, limit = 10 }) {
   )
 }
 
+// ─── Per-protocol daily activity (multi-line) ─────────────────────────────────
+const _PROTO_LIST = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
+const _PROTO_COLORS = { ssh: '#38bdf8', ftp: '#f9a8d4', http: '#86efac', modbus: '#a78bfa', mqtt: '#fdba74', telnet: '#fda4af' }
+
+export function ProtocolTimelineChart({ logs }) {
+  const { labels, datasets } = useMemo(() => {
+    const dayCounts = {}
+    for (const l of logs) {
+      if (!l.date || !l.protocol || !_PROTO_LIST.includes(l.protocol)) continue
+      if (!dayCounts[l.date]) dayCounts[l.date] = {}
+      dayCounts[l.date][l.protocol] = (dayCounts[l.date][l.protocol] || 0) + 1
+    }
+    const sortedDays = Object.keys(dayCounts).sort()
+    if (sortedDays.length === 0) return { labels: [], datasets: [] }
+
+    const allDays = []
+    if (sortedDays.length >= 2) {
+      const start = new Date(sortedDays[0] + 'T00:00:00')
+      const end = new Date(sortedDays[sortedDays.length - 1] + 'T00:00:00')
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        allDays.push(d.toISOString().slice(0, 10))
+      }
+    } else {
+      allDays.push(...sortedDays)
+    }
+
+    return {
+      labels: allDays.map(d => d.slice(5)),
+      datasets: _PROTO_LIST.map(p => ({
+        label: p.toUpperCase(),
+        data: allDays.map(d => dayCounts[d]?.[p] || 0),
+        borderColor: _PROTO_COLORS[p],
+        backgroundColor: _PROTO_COLORS[p] + '15',
+        borderWidth: 1.5,
+        fill: false,
+        tension: 0.4,
+        pointRadius: allDays.length > 30 ? 0 : 2,
+        pointHoverRadius: 4,
+      })),
+    }
+  }, [logs])
+
+  if (labels.length === 0) return <div className="text-text-muted text-sm italic py-4 text-center">No data</div>
+
+  return (
+    <Line
+      data={{ labels, datasets }}
+      options={{
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, grid: { color: '#151d28' }, ticks: { color: '#5a6370' } },
+          x: { grid: { display: false }, ticks: { color: '#5a6370', maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { padding: 8, color: '#5a6370', font: { size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
+        },
+      }}
+    />
+  )
+}
+
+// ─── Generic top-N ranked list for HTTP analytics ─────────────────────────────
+// fieldFn: (log) => string|null — extracts the value to rank from a log entry
+export function TopHTTPTable({ logs, fieldFn, emptyLabel = 'data', accent = '#6366f1', onItemClick, limit = 10 }) {
+  const sorted = useMemo(() => {
+    const counts = {}
+    for (const l of logs) {
+      if (l.protocol !== 'http') continue
+      const raw = fieldFn(l)
+      if (!raw) continue
+      const key = String(raw).slice(0, 200).trim()
+      if (!key) continue
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit)
+  }, [logs, fieldFn, limit])
+
+  if (sorted.length === 0) return <div className="text-text-muted text-sm italic py-4 text-center">No {emptyLabel} data</div>
+  const max = sorted[0][1]
+
+  return (
+    <div className="space-y-1.5">
+      {sorted.map(([key, count]) => (
+        <button
+          key={key}
+          onClick={() => onItemClick?.(key)}
+          className="w-full flex items-center gap-3 group hover:bg-surface-hover/50 rounded-lg px-2 py-1.5 transition-colors"
+        >
+          <code className="text-xs font-mono text-text-primary flex-1 text-left truncate min-w-0">{key}</code>
+          <div className="w-20 bg-surface-tertiary rounded-full h-1.5 overflow-hidden shrink-0">
+            <div className="h-full rounded-full transition-all" style={{ width: `${(count / max) * 100}%`, backgroundColor: accent + 'aa' }} />
+          </div>
+          <span className="text-xs font-mono text-text-secondary w-[40px] text-right shrink-0">{formatNumber(count)}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ─── Internal helper ──────────────────────────────────────────────────────────
 function countryFlag(cc) {
   if (!cc || cc.length !== 2) return null
