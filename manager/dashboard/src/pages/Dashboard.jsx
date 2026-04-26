@@ -15,6 +15,7 @@ import {
 import { Line, Doughnut, Bar } from 'react-chartjs-2'
 import { fetchLogs, fetchAgents, fetchGeoIP } from '../api'
 import StatCard from '../components/StatCard'
+import { formatNumber } from '../utils'
 import { ProtocolTag } from '../components/Tags'
 import DataTable from '../components/DataTable'
 
@@ -161,7 +162,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[10px] text-text-muted font-mono tracking-wide">
-            {filteredLogs.length.toLocaleString()} logs
+            {formatNumber(filteredLogs.length)} logs
           </span>
           <span className="text-[10px] text-text-muted flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse-slow" />

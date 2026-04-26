@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { formatNumber } from '../utils'
 
 const PAGE_SIZES = [25, 50, 100, 250]
 
@@ -120,7 +121,7 @@ export default function DataTable({
               ))}
             </select>
             <span className="text-[10px] text-text-muted">
-              of {data.length.toLocaleString()} logs
+              of {formatNumber(data.length)} logs
             </span>
           </div>
 
