@@ -2,6 +2,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import time
 import urllib.request
 from collections import defaultdict
@@ -29,6 +30,14 @@ SENSITIVE_SSH_COMMANDS = [
 
 VERDICT_MALICIOUS = 70
 VERDICT_SUSPICIOUS = 30
+
+LOOKBACK_DAYS = 90
+
+# Precompiled word-boundary patterns for sensitive command detection
+_SENSITIVE_SSH_PATTERNS = [
+    re.compile(r'\b' + re.escape(kw) + r'\b', re.IGNORECASE)
+    for kw in SENSITIVE_SSH_COMMANDS
+]
 
 # Parse a timestamp from various log formats
 def parse_timestamp(entry: Dict) -> Optional[datetime]:
@@ -114,7 +123,7 @@ def calculate_threat_score(
                 ssh_success += 1
             elif "failed" in action:
                 ssh_failed += 1
-            if any(kw in action for kw in SENSITIVE_SSH_COMMANDS):
+            if any(p.search(action) for p in _SENSITIVE_SSH_PATTERNS):
                 sensitive_cmds += 1
 
         elif protocol == "ftp":
@@ -375,7 +384,8 @@ def fetch_logs_from_mongo() -> List[Dict]:
     try:
         client = MongoClient(MONGO_URI)
         col = client["melissae"]["logs"]
-        return list(col.find({}, {"_id": 0}))
+        cutoff = (datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        return list(col.find({"date": {"$gte": cutoff}}, {"_id": 0}))
     except PyMongoError as e:
         print(f"[threatIntel] Mongo read error: {e}")
         return []
@@ -387,17 +397,12 @@ def write_threats_to_mongo(threats: List[Dict]) -> None:
         client = MongoClient(MONGO_URI)
         col = client["melissae"]["threats"]
 
-        current_ips = {t["ip"] for t in threats if t.get("ip")}
-
         if threats:
             ops = [
                 UpdateOne({"ip": t["ip"]}, {"$set": t}, upsert=True)
                 for t in threats
             ]
             col.bulk_write(ops, ordered=False)
-
-        if current_ips:
-            col.delete_many({"ip": {"$nin": list(current_ips)}})
 
         col.create_index("ip", unique=True)
     except PyMongoError as e:

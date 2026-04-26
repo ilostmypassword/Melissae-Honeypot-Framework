@@ -31,7 +31,7 @@ PATTERNS = {
     },
     'http': {
         'source': 'web/access.log',
-        'pattern': re.compile(r'^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|HEAD|OPTIONS|PROPFIND|EWYM) (\S+) HTTP/\d\.\d" (\d+) \d+ ".*?" "(.*?)"$')
+        'pattern': re.compile(r'^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|PROPFIND|TRACE|CONNECT|SEARCH) (\S+) HTTP/\d\.\d" (\d+) \d+ ".*?" "(.*?)"$')
     },
     'modbus': {
         'source': 'modbus/modbus.log',
@@ -44,7 +44,7 @@ PATTERNS = {
             'disconnect': re.compile(r'(?P<date>\d+): Client (?P<user>\S+) disconnected\.'),
             'subscribe': re.compile(r'(?P<date>\d+): Received SUBSCRIBE from (?P<user>\S+)'),
             'subscribe_topic': re.compile(r'^\s+(?P<path>\S+)'),
-            'publish': re.compile(r"(?P<date>\d+): Received PUBLISH from (?P<user>\S+).*?'(?P<path>[^']+)'.*?$(?P<size>\d+)\s+bytes$")
+            'publish': re.compile(r"(?P<date>\d+): Received PUBLISH from (?P<user>\S+).*?'(?P<path>[^']+)'.*?(?P<size>\d+)\s+bytes$")
         }
     },
     'telnet': {
@@ -150,11 +150,14 @@ def read_new_lines(source: str, file_states: Dict) -> List[str]:
         stats = os.stat(source)
         size = stats.st_size
         mtime = stats.st_mtime
+        inode = stats.st_ino
         state = file_states.get(source, {})
         offset = state.get('offset', 0)
         prev_mtime = state.get('mtime', 0)
+        prev_inode = state.get('inode', 0)
 
-        if size < offset or mtime < prev_mtime:
+        # Reset on rotation: inode changed, file shrunk, or mtime went backward
+        if inode != prev_inode or size < offset or mtime < prev_mtime:
             offset = 0
 
         with open(source, 'r', encoding='utf-8') as f:
@@ -166,6 +169,7 @@ def read_new_lines(source: str, file_states: Dict) -> List[str]:
             'offset': new_offset,
             'mtime': mtime,
             'size': size,
+            'inode': inode,
         }
         return lines
     except OSError as e:
@@ -283,7 +287,7 @@ def parse_modbus(logs_dir: str, file_states: Dict) -> List[Dict]:
     return logs
 
 # Parse MQTT honeypot log lines
-def parse_mqtt(logs_dir: str, file_states: Dict) -> List[Dict]:
+def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['mqtt']['source'])
     lines = read_new_lines(source, file_states)
@@ -291,7 +295,6 @@ def parse_mqtt(logs_dir: str, file_states: Dict) -> List[Dict]:
         return logs
 
     p = PATTERNS['mqtt']['patterns']
-    client_ip_map: Dict[str, str] = {}
     i = 0
     while i < len(lines):
         line = lines[i].rstrip('\n')
@@ -379,6 +382,8 @@ def _parse_telnet_lines(lines: List[str], pid_to_ip: Dict[str, str],
                 dt = parse_iso8601_ts(m.group('datetime'))
                 user = m.group('user').split('(')[0]
                 ip = pid_to_ip.get(pid, last_ip)
+                if not ip:
+                    continue
                 logs.append(create_entry('telnet', dt, ip, 'Login successful', user=user))
                 continue
 
@@ -443,12 +448,14 @@ MODULE_PARSERS = {
 }
 
 _NEEDS_PID_MAP = {parse_telnet, parse_telnet_cve}
+_NEEDS_CLIENT_MAP = {parse_mqtt}
 
 # Parse logs from all enabled modules
 def parse_all_modules(logs_dir: str, enabled_modules: Dict[str, str],
                       state: Dict) -> List[Dict]:
     file_states = state.setdefault('files', {})
     pid_to_ip = state.setdefault('telnet_pid_to_ip', {})
+    mqtt_client_ip_map = state.setdefault('mqtt_client_ip_map', {})
     all_logs: List[Dict] = []
 
     for module_name in enabled_modules:
@@ -456,6 +463,8 @@ def parse_all_modules(logs_dir: str, enabled_modules: Dict[str, str],
         for parser_fn in parsers:
             if parser_fn in _NEEDS_PID_MAP:
                 all_logs.extend(parser_fn(logs_dir, file_states, pid_to_ip))
+            elif parser_fn in _NEEDS_CLIENT_MAP:
+                all_logs.extend(parser_fn(logs_dir, file_states, mqtt_client_ip_map))
             else:
                 all_logs.extend(parser_fn(logs_dir, file_states))
 

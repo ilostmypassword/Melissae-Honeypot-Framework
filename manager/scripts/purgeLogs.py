@@ -48,7 +48,7 @@ def purge_benign_older_than_1h():
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
 
-        benign_iocs = list(db["threats"].find({"verdict": {"$regex": "^benign$", "$options": "i"}}, {"ip": 1, "_id": 0}))
+        benign_iocs = list(db["threats"].find({"verdict": "benign"}, {"ip": 1, "_id": 0}))
         if not benign_iocs:
             return
 

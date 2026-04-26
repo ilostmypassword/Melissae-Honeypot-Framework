@@ -147,7 +147,6 @@ The complete documentation is hosted on Read the Docs.
 | 🎯 | [Scoring](https://melissae-documentation.readthedocs.io/en/latest/scoring.html) | Threat scoring signals, verdicts, confidence |
 | 🚀 | [Getting Started](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html) | Installation, enrollment, configuration |
 | ⌨️ | [CLI Reference](https://melissae-documentation.readthedocs.io/en/latest/cli-reference.html) | Manager and agent commands |
-| 🔒 | [Security](https://melissae-documentation.readthedocs.io/en/latest/security.html) | Defense-in-depth measures |
 | 🤝 | [Contributing](https://melissae-documentation.readthedocs.io/en/latest/contributing.html) | Roadmap and how to contribute |
 
 ---
