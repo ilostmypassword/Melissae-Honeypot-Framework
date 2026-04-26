@@ -170,6 +170,16 @@ export default function Dashboard() {
       )}
 
       {/* Key Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard value={s.totalLogs} label="Total Logs" trend={prevS.totalTrend} />
+        <StatCard value={s.uniqueIPs} label="Unique IPs" trend={prevS.ipTrend} />
+        <StatCard value={`${healthyAgents}/${agents.length}`} label="Agents Online" />
+        <StatCard value={s.protocols.ssh} label="SSH" onClick={() => goSearch('protocol:ssh')} trend={prevS.sshTrend} />
+        <StatCard value={s.protocols.http} label="HTTP" onClick={() => goSearch('protocol:http')} trend={prevS.httpTrend} />
+        <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
+      </div>
+
+      {/* Daily Activity + Protocol Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-card p-5">
           <h3 className="section-title mb-4">Daily Activity</h3>
