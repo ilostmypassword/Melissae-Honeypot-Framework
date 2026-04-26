@@ -943,7 +943,7 @@ $cmd"
 
     add_cron "* * * * * /usr/bin/python3 $WORKING_DIRECTORY/scripts/threatIntel.py" "threatIntel"
     add_cron "0 */3 * * * /usr/bin/python3 $WORKING_DIRECTORY/scripts/purgeLogs.py" "purgeLogs"
-    add_cron "* * * * * /usr/bin/python3 $WORKING_DIRECTORY/health_poller.py" "healthPoller"
+    add_cron "* * * * * /usr/bin/python3 $WORKING_DIRECTORY/scripts/health_poller.py" "healthPoller"
     echo "$current_cron" | crontab -
     success "Cron jobs configured"
 
