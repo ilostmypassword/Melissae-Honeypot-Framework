@@ -130,31 +130,46 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard value={s.totalLogs} label="Total Logs" trend={prevS.totalTrend} />
-        <StatCard value={s.uniqueIPs} label="Unique IPs" trend={prevS.ipTrend} />
-        <StatCard value={`${healthyAgents}/${agents.length}`} label="Agents Online" />
-        <StatCard value={s.protocols.ssh} label="SSH" onClick={() => goSearch('protocol:ssh')} trend={prevS.sshTrend} />
-        <StatCard value={s.protocols.http} label="HTTP" onClick={() => goSearch('protocol:http')} trend={prevS.httpTrend} />
-        <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
-      </div>
-
-      {/* Critical Events Banner */}
+      {/* Critical Events Banner — shown immediately if alerts exist */}
       {alerts.length > 0 && (
-        <div className="bg-verdict-malicious/[0.06] border border-verdict-malicious/20 rounded-xl p-4">
-          <h3 className="section-title text-verdict-malicious mb-3">Critical Events</h3>
-          <div className="flex flex-wrap gap-2">
-            {alerts.map(a => (
-              <button key={a.label} onClick={() => goSearch(a.query)} className="px-3 py-1.5 bg-verdict-malicious/10 hover:bg-verdict-malicious/20 text-verdict-malicious rounded-lg text-xs font-semibold transition-all duration-200 border border-verdict-malicious/15 hover:border-verdict-malicious/30">
-                {a.value} {a.label}
-              </button>
-            ))}
+        <div className="relative overflow-hidden rounded-xl border border-verdict-malicious/25 bg-verdict-malicious/[0.04]">
+          {/* Left accent stripe */}
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-verdict-malicious rounded-l-xl" />
+          <div className="pl-5 pr-4 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Icon + title */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
+              </span>
+              <span className="text-xs font-bold uppercase tracking-widest text-verdict-malicious">
+                Critical Events
+              </span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-verdict-malicious/15 text-verdict-malicious border border-verdict-malicious/20">
+                {alerts.length}
+              </span>
+            </div>
+            {/* Divider (desktop) */}
+            <div className="hidden sm:block w-px h-5 bg-verdict-malicious/20 shrink-0" />
+            {/* Alert chips */}
+            <div className="flex flex-wrap gap-2">
+              {alerts.map(a => (
+                <button
+                  key={a.label}
+                  onClick={() => goSearch(a.query)}
+                  className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-verdict-malicious/20 bg-verdict-malicious/[0.06] hover:bg-verdict-malicious/15 hover:border-verdict-malicious/40 transition-all duration-200"
+                >
+                  <span className="text-sm font-bold font-mono text-verdict-malicious">{formatNumber(a.value)}</span>
+                  <span className="text-xs text-verdict-malicious/80 group-hover:text-verdict-malicious transition-colors">{a.label}</span>
+                  <svg className="w-3 h-3 text-verdict-malicious/40 group-hover:text-verdict-malicious/70 transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Daily Activity + Protocol Breakdown */}
+      {/* Key Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-card p-5">
           <h3 className="section-title mb-4">Daily Activity</h3>
