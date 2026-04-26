@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchGeoIP } from '../api'
 import StatCard from '../components/StatCard'
 import { ProtocolChart, TopAttackersList, TopCredentials, TopHTTPTable } from '../components/charts'
-import { filterByDateRange, computeStats } from '../utils'
+import { filterByDateRange, computeStats, formatNumber } from '../utils'
 
 const DATE_RANGES = [
   { label: 'Today', value: 'today' },
@@ -82,7 +82,7 @@ export default function AttackerStats() {
             ))}
           </div>
         </div>
-        <span className="text-[10px] text-text-muted font-mono">{s.uniqueIPs} unique IPs</span>
+        <span className="text-[10px] text-text-muted font-mono">{formatNumber(s.uniqueIPs)} unique IPs</span>
       </div>
 
       {/* Security events summary */}

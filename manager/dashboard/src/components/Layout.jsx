@@ -103,7 +103,7 @@ export default function Layout({ children }) {
                     <NavLink
                       key={item.to}
                       to={item.to}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 group relative ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 group relative overflow-hidden ${
                         isActive
                           ? 'bg-accent/10 text-accent-hover'
                           : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover/50'
@@ -113,7 +113,7 @@ export default function Layout({ children }) {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent" />
                       )}
                       <item.icon active={isActive} />
-                      {item.label}
+                      <span className="truncate">{item.label}</span>
                     </NavLink>
                   )
                 })}

@@ -6,14 +6,6 @@ import { DailyChart, ProtocolChart, ProtocolTimelineChart } from '../components/
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 
 const REFRESH_INTERVAL = 30_000
-const PROTOCOL_META = [
-  { key: 'ssh',    label: 'SSH',    color: '#38bdf8' },
-  { key: 'ftp',    label: 'FTP',    color: '#f9a8d4' },
-  { key: 'http',   label: 'HTTP',   color: '#86efac' },
-  { key: 'modbus', label: 'Modbus', color: '#a78bfa' },
-  { key: 'mqtt',   label: 'MQTT',   color: '#fdba74' },
-  { key: 'telnet', label: 'Telnet', color: '#fda4af' },
-]
 const DATE_RANGES = [
   { label: 'Today', value: 'today' },
   { label: '7 days', value: '7d' },
