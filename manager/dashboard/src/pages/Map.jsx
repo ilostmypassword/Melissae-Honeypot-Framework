@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, Component } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatNumber } from '../utils'
 import { fetchThreats } from '../api'
 import WorldMap from '../components/WorldMap'
 import { VerdictTag } from '../components/Tags'
@@ -93,15 +94,15 @@ export default function Map() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="glass-card p-4">
           <p className="section-title">Total IPs</p>
-          <p className="text-2xl font-semibold text-text-primary font-mono mt-1">{threats.length}</p>
+          <p className="text-2xl font-semibold text-text-primary font-mono mt-1">{formatNumber(threats.length)}</p>
         </div>
         <div className="glass-card p-4">
           <p className="section-title">External (Public)</p>
-          <p className="text-2xl font-semibold text-protocol-http font-mono mt-1">{geoThreats.length}</p>
+          <p className="text-2xl font-semibold text-protocol-http font-mono mt-1">{formatNumber(geoThreats.length)}</p>
         </div>
         <div className="glass-card p-4">
           <p className="section-title">Internal (Private)</p>
-          <p className="text-2xl font-semibold text-protocol-ssh font-mono mt-1">{localThreats.length}</p>
+          <p className="text-2xl font-semibold text-protocol-ssh font-mono mt-1">{formatNumber(localThreats.length)}</p>
         </div>
       </div>
 
@@ -111,7 +112,7 @@ export default function Map() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">External Attack Origins</h3>
             <span className="text-xs text-text-muted">
-              {geoThreats.length} geolocated IPs
+              {formatNumber(geoThreats.length)} geolocated IPs
             </span>
           </div>
           <div className="h-[500px]">
@@ -128,7 +129,7 @@ export default function Map() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Internal Network Threats</h3>
             <span className="text-xs text-text-muted">
-              {localThreats.length} private IPs
+              {formatNumber(localThreats.length)} private IPs
             </span>
           </div>
 

@@ -1,3 +1,5 @@
+import { formatNumber } from '../utils'
+
 // Dashboard statistic card with label and value
 export default function StatCard({ value, label, onClick, variant, trend }) {
   const variants = {
@@ -21,7 +23,7 @@ export default function StatCard({ value, label, onClick, variant, trend }) {
       <div className="flex items-start justify-between gap-2">
         <div className={`text-3xl font-bold font-mono tracking-tight ${isCritical ? 'text-red-400' : 'text-text-primary'}`}>
           {isCritical && <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse mr-2 align-middle"></span>}
-          {value}
+          {typeof value === 'number' ? formatNumber(value) : value}
         </div>
         {trend != null && trend !== 0 && (
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0 mt-1 ${
