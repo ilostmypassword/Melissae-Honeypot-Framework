@@ -1,28 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js'
-import { Line, Doughnut, Bar } from 'react-chartjs-2'
-import { fetchLogs, fetchAgents, fetchGeoIP } from '../api'
+import { fetchLogs, fetchAgents } from '../api'
 import StatCard from '../components/StatCard'
-import { formatNumber } from '../utils'
-import { ProtocolTag } from '../components/Tags'
-import DataTable from '../components/DataTable'
-
-ChartJS.register(
-  CategoryScale, LinearScale, PointElement,
-  LineElement, BarElement, ArcElement, Tooltip, Legend, Filler
-)
+import { DailyChart, ProtocolChart } from '../components/charts'
+import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 
 const REFRESH_INTERVAL = 30_000
 const DATE_RANGES = [
@@ -42,7 +23,6 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [secondsAgo, setSecondsAgo] = useState(0)
-  const [geoData, setGeoData] = useState({})
   const navigate = useNavigate()
   const refreshTimer = useRef(null)
 
@@ -57,8 +37,6 @@ export default function Dashboard() {
       setAgents(agentsData)
       setLastRefresh(Date.now())
       setError(null)
-      const uniqueIPs = [...new Set(logsData.map(l => l.ip).filter(Boolean))]
-      fetchGeoIP(uniqueIPs).then(setGeoData).catch(() => {})
     } catch (err) {
       setError(err.message)
     } finally {
@@ -79,31 +57,13 @@ export default function Dashboard() {
     return () => clearInterval(t)
   }, [lastRefresh])
 
-  const agentIds = useMemo(() => {
-    const ids = [...new Set(logs.map(l => l.agent_id).filter(Boolean))]
-    return ids.sort()
-  }, [logs])
+  const agentIds = useMemo(() => [...new Set(logs.map(l => l.agent_id).filter(Boolean))].sort(), [logs])
 
-  const dateFilteredLogs = useMemo(() => {
-    if (dateRange === 'all') return logs
-    const now = new Date()
-    const pad = n => String(n).padStart(2, '0')
-    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    let cutoffDate
-    if (dateRange === 'today') {
-      cutoffDate = todayStr
-    } else {
-      const cutoff = new Date(now)
-      if (dateRange === '7d') cutoff.setDate(cutoff.getDate() - 7)
-      else if (dateRange === '30d') cutoff.setDate(cutoff.getDate() - 30)
-      cutoffDate = `${cutoff.getFullYear()}-${pad(cutoff.getMonth() + 1)}-${pad(cutoff.getDate())}`
-    }
-    return logs.filter(l => l.date && l.date >= cutoffDate)
-  }, [logs, dateRange])
+  const dateFilteredLogs = useMemo(() => filterByDateRange(logs, dateRange), [logs, dateRange])
 
-  const filteredLogs = useMemo(() => {
-    return selectedAgent ? dateFilteredLogs.filter(l => l.agent_id === selectedAgent) : dateFilteredLogs
-  }, [dateFilteredLogs, selectedAgent])
+  const filteredLogs = useMemo(() => (
+    selectedAgent ? dateFilteredLogs.filter(l => l.agent_id === selectedAgent) : dateFilteredLogs
+  ), [dateFilteredLogs, selectedAgent])
 
   const goSearch = term => {
     const agentParam = selectedAgent ? `&agent=${encodeURIComponent(selectedAgent)}` : ''
@@ -115,15 +75,136 @@ export default function Dashboard() {
 
   const s = computeStats(filteredLogs)
   const prevS = computeTrend(logs, selectedAgent)
-  const recentLogs = filteredLogs.slice(-50).reverse()
   const healthyAgents = agents.filter(a => a.status === 'healthy').length
 
   const alerts = []
   if (s.cveLogs > 0) alerts.push({ label: 'CVE Exploits', value: s.cveLogs, query: 'cve:CVE' })
   if (s.successSSH > 0) alerts.push({ label: 'SSH Logins', value: s.successSSH, query: 'action:successful AND protocol:ssh' })
   if (s.successFTP > 0) alerts.push({ label: 'FTP Logins', value: s.successFTP, query: 'action:successful AND protocol:ftp' })
-  if (s.successTelnet > 0) alerts.push({ label: 'Telnet Logins', value: s.successTelnet, query: 'action:session AND protocol:telnet' })
+  if (s.successTelnet > 0) alerts.push({ label: 'Telnet Sessions', value: s.successTelnet, query: 'action:session AND protocol:telnet' })
   if (s.modbusWrites > 0) alerts.push({ label: 'Modbus Writes', value: s.modbusWrites, query: 'action:write AND protocol:modbus' })
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-text-primary tracking-tight">Dashboard</h1>
+          <select
+            value={selectedAgent}
+            onChange={e => setSelectedAgent(e.target.value)}
+            className="px-3 py-1.5 bg-surface-tertiary border border-border rounded-lg text-text-primary text-sm focus:border-accent outline-none transition-colors"
+          >
+            <option value="">All agents</option>
+            {agentIds.map(id => (
+              <option key={id} value={id}>{id}</option>
+            ))}
+          </select>
+          {selectedAgent && (
+            <button onClick={() => setSelectedAgent('')} className="text-xs text-text-muted hover:text-text-primary transition-colors">✕</button>
+          )}
+          <div className="flex bg-surface-tertiary rounded-lg border border-border overflow-hidden">
+            {DATE_RANGES.map(r => (
+              <button
+                key={r.value}
+                onClick={() => setDateRange(r.value)}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                  dateRange === r.value
+                    ? 'bg-accent/15 text-accent'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover/30'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-text-muted font-mono tracking-wide">
+            {formatNumber(filteredLogs.length)} logs
+          </span>
+          <span className="text-[10px] text-text-muted flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse-slow" />
+            {secondsAgo < 5 ? 'Just now' : `${secondsAgo}s ago`}
+          </span>
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard value={s.totalLogs} label="Total Logs" trend={prevS.totalTrend} />
+        <StatCard value={s.uniqueIPs} label="Unique IPs" trend={prevS.ipTrend} />
+        <StatCard value={`${healthyAgents}/${agents.length}`} label="Agents Online" />
+        <StatCard value={s.protocols.ssh} label="SSH" onClick={() => goSearch('protocol:ssh')} trend={prevS.sshTrend} />
+        <StatCard value={s.protocols.http} label="HTTP" onClick={() => goSearch('protocol:http')} trend={prevS.httpTrend} />
+        <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
+      </div>
+
+      {/* Critical Events Banner */}
+      {alerts.length > 0 && (
+        <div className="bg-verdict-malicious/[0.06] border border-verdict-malicious/20 rounded-xl p-4">
+          <h3 className="section-title text-verdict-malicious mb-3">Critical Events</h3>
+          <div className="flex flex-wrap gap-2">
+            {alerts.map(a => (
+              <button key={a.label} onClick={() => goSearch(a.query)} className="px-3 py-1.5 bg-verdict-malicious/10 hover:bg-verdict-malicious/20 text-verdict-malicious rounded-lg text-xs font-semibold transition-all duration-200 border border-verdict-malicious/15 hover:border-verdict-malicious/30">
+                {a.value} {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Daily Activity + Protocol Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 glass-card p-5">
+          <h3 className="section-title mb-4">Daily Activity</h3>
+          <div className="h-[240px]">
+            <DailyChart logs={filteredLogs} onDayClick={d => goSearch(`date:${d}`)} />
+          </div>
+        </div>
+        <div className="glass-card p-5">
+          <h3 className="section-title mb-4">Protocols</h3>
+          <div className="max-w-[220px] mx-auto">
+            <ProtocolChart logs={filteredLogs} onClick={p => goSearch(`protocol:${p}`)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Loading skeleton
+function LoadingState() {
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center gap-3">
+        <div className="skeleton h-7 w-32" />
+        <div className="skeleton h-8 w-28" />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="skeleton h-24 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 skeleton h-72 rounded-xl" />
+        <div className="skeleton h-72 rounded-xl" />
+      </div>
+    </div>
+  )
+}
+
+// Error message display
+function ErrorState({ message }) {
+  return (
+    <div className="glass-card text-verdict-malicious p-6 text-center border-verdict-malicious/20 animate-fade-in">
+      <div className="text-2xl mb-2 opacity-60">&diams;</div>
+      <div className="font-medium">Unable to load data</div>
+      <div className="text-sm mt-1 opacity-60">{message}</div>
+    </div>
+  )
+}
+
 
   return (
     <div className="space-y-6 animate-fade-in">
