@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchGeoIP } from '../api'
 import StatCard from '../components/StatCard'
-import { ProtocolChart, TopAttackersList, TopCredentials } from '../components/charts'
+import { ProtocolChart, TopAttackersList, TopCredentials, TopHTTPTable } from '../components/charts'
 import { filterByDateRange, computeStats } from '../utils'
 
 const DATE_RANGES = [
@@ -113,6 +113,48 @@ export default function AttackerStats() {
         <h3 className="section-title mb-4">Top Attempted Credentials</h3>
         <TopCredentials logs={filteredLogs} limit={20} />
       </div>
+
+      {/* HTTP Analysis */}
+      {s.protocols.http > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-widest">HTTP Analysis</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="glass-card p-5">
+              <h3 className="section-title mb-4">Top User Agents</h3>
+              <TopHTTPTable
+                logs={filteredLogs}
+                fieldFn={l => l['user-agent']}
+                emptyLabel="user agent"
+                accent="#86efac"
+                onItemClick={ua => goSearch(`user-agent:${ua}`)}
+                limit={10}
+              />
+            </div>
+            <div className="glass-card p-5">
+              <h3 className="section-title mb-4">Top HTTP Paths</h3>
+              <TopHTTPTable
+                logs={filteredLogs}
+                fieldFn={l => l.path}
+                emptyLabel="path"
+                accent="#6366f1"
+                onItemClick={path => goSearch(`path:${path}`)}
+                limit={10}
+              />
+            </div>
+            <div className="glass-card p-5">
+              <h3 className="section-title mb-4">HTTP Methods</h3>
+              <TopHTTPTable
+                logs={filteredLogs}
+                fieldFn={l => l.action}
+                emptyLabel="method"
+                accent="#fdba74"
+                onItemClick={method => goSearch(`action:${method} AND protocol:http`)}
+                limit={8}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
