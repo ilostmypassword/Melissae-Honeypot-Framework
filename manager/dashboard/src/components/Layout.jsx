@@ -13,7 +13,7 @@ const navSections = [
     label: 'Statistics',
     items: [
       { to: '/stats/activity', label: 'Traffic', icon: ActivityIcon },
-      { to: '/stats/attackers', label: 'Attackers', icon: AttackerIcon },
+      { to: '/stats/attackers', label: 'Threats', icon: AttackerIcon },
     ],
   },
   {
@@ -24,9 +24,9 @@ const navSections = [
     ],
   },
   {
-    label: 'Intel',
+    label: 'Intelligence',
     items: [
-      { to: '/threats', label: 'Threat Intel', icon: ThreatIcon },
+      { to: '/threats', label: 'Threat Intelligence', icon: ThreatIcon },
     ],
   },
 ]

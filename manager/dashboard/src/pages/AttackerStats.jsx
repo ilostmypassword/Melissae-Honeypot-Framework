@@ -56,7 +56,7 @@ export default function AttackerStats() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-text-primary tracking-tight">Attackers</h1>
+          <h1 className="text-xl font-semibold text-text-primary tracking-tight">Threats</h1>
           <select
             value={selectedAgent}
             onChange={e => setSelectedAgent(e.target.value)}
