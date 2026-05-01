@@ -369,7 +369,7 @@ CFGEOF
     echo
     echo -e "${CYAN}Next steps:${RESET}"
     echo -e "  1. ${WHITE}sudo usermod -aG docker $USER${RESET} then re-login"
-    echo -e "  2. Review modules in ${WHITE}$CONFIG_FILE${RESET}"
+    echo -e "  2. Review modules with ${WHITE}list${RESET}"
     echo -e "  3. ${WHITE}start${RESET} to launch honeypots + agent daemon"
     echo
 }
