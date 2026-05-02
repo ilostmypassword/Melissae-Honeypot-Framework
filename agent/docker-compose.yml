@@ -28,24 +28,13 @@ services:
       - melissae_apache2
 
   melissae_ftp:
-    image: fauria/vsftpd
+    build:
+      context: ..
+      dockerfile: modules/ftp/Dockerfile
     container_name: melissae_ftp
     restart: unless-stopped
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        touch /var/log/vsftpd.log && chmod 644 /var/log/vsftpd.log
-        (while sleep 60; do chmod 644 /var/log/vsftpd.log 2>/dev/null; done) &
-        exec /usr/sbin/run-vsftpd.sh
     ports:
       - "21:21"
-    environment:
-      FTP_USER: ftpuser
-      FTP_PASS: ftppass
-      PASV_ENABLE: "NO"
-      LOCAL_UMASK: 000
-      FILE_OPEN_MODE: 0777
     volumes:
       - ../modules/ftp/server:/home/vsftpd
       - ./logs/ftp:/var/log

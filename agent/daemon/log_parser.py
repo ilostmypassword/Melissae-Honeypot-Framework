@@ -26,7 +26,8 @@ PATTERNS = {
         'patterns': {
             'connect': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] CONNECT: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)"'),
             'login': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] (?P<status>OK|FAIL) LOGIN: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)"'),
-            'transfer': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] OK (?P<type>UPLOAD|DOWNLOAD): Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<file>.+?)", (?P<size>\d+) bytes')
+            'transfer': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] OK (?P<type>UPLOAD|DOWNLOAD): Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<file>.+?)", (?P<size>\d+) bytes'),
+            'command': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]*)\] FTP command: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<cmd>DELE|MKD|RMD|CWD|RNFR|RNTO|APPE|SITE)(?: (?P<arg>[^"]+))?"')
         }
     },
     'http': {
@@ -230,17 +231,35 @@ def parse_ssh_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
             logs.append(create_entry('ssh', dt, match.group('ip'), cleaned_command))
     return logs
 
+_FTP_CMD_LABELS = {
+    'DELE': 'Delete',
+    'MKD':  'Create directory',
+    'RMD':  'Remove directory',
+    'CWD':  'Change directory to',
+    'RNFR': 'Rename from',
+    'RNTO': 'Rename to',
+    'APPE': 'Append to file',
+    'SITE': 'Site command',
+}
+
 # Parse FTP honeypot log lines
 def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['ftp']['source'])
     for line in read_new_lines(source, file_states):
-        for pattern_name in ['transfer', 'connect', 'login']:
+        for pattern_name in ['command', 'transfer', 'connect', 'login']:
             pattern = PATTERNS['ftp']['patterns'][pattern_name]
             match = pattern.match(line)
             if match:
                 dt = datetime.strptime(match.group(1), '%a %b %d %H:%M:%S %Y')
-                if pattern_name == 'transfer':
+                if pattern_name == 'command':
+                    cmd = match.group('cmd')
+                    arg = (match.group('arg') or '').strip()
+                    label = _FTP_CMD_LABELS.get(cmd, cmd)
+                    action = f"{label}: {arg}" if arg else label
+                    user = match.group('user') or None
+                    logs.append(create_entry('ftp', dt, match.group('ip'), action, user=user))
+                elif pattern_name == 'transfer':
                     logs.append(create_entry('ftp', dt, match.group('ip'),
                                              f"{match.group('type').capitalize()} of '{match.group('file')}' ({match.group('size')} bytes)",
                                              user=match.group('user')))
