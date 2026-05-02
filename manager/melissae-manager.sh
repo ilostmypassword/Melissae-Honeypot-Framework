@@ -404,14 +404,28 @@ print('OK')
         return 1
     fi
 
+    local manager_endpoint=""
+    if [ -f "$PKI_DIR/manager.fqdn" ]; then
+        manager_endpoint=$(tr -d '[:space:]' < "$PKI_DIR/manager.fqdn")
+        manager_endpoint="${manager_endpoint#https://}"
+        manager_endpoint="${manager_endpoint#http://}"
+        manager_endpoint="${manager_endpoint%%/*}"
+        manager_endpoint="${manager_endpoint%%:*}"
+    fi
+    if [ -z "$manager_endpoint" ]; then
+        manager_endpoint="<manager-ip>"
+    fi
+
     echo
     success "Enrollment token generated (expires in 10 minutes)"
     echo
     echo -e "${BOLD}${WHITE}   Run this on the agent:${RESET}"
     echo
-    echo -e "   ${CYAN}./melissae-agent.sh install https://<manager-ip>:8443 $token${RESET}"
+    echo -e "   ${CYAN}./melissae-agent.sh install https://${manager_endpoint}:8443 $token${RESET}"
     echo
-    echo -e "${DIM}   Replace <manager-ip> with this server's IP or hostname.${RESET}"
+    if [ "$manager_endpoint" = "<manager-ip>" ]; then
+        echo -e "${DIM}   Replace <manager-ip> with this server's IP or hostname.${RESET}"
+    fi
     echo -e "${DIM}   Agent name: $agent_name${RESET}"
     echo
 }
@@ -939,6 +953,9 @@ cmd_install() {
 
     info "Generating manager certificate (SANs: ${san_args[*]})..."
     _CERT_CN="$manager_fqdn" _gen_cert "manager" "dual" "${san_args[@]}"
+
+    printf '%s\n' "$manager_fqdn" > "$PKI_DIR/manager.fqdn"
+    chmod 600 "$PKI_DIR/manager.fqdn"
 
     echo
     info "Configure dashboard authentication"
