@@ -7,7 +7,7 @@ description: >
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 10m
+lookback: 1m
 mql: >
   protocol:ssh AND
   (action:wget OR action:curl OR action:chmod OR action:/etc/passwd
@@ -15,6 +15,6 @@ mql: >
    OR action:ssh-keygen OR action:crontab)
 group_by: ip
 threshold: 1
-score: 35
+score: 70
 tags: [post-compromise, recon, execution]
 mitre: [T1059, T1083]

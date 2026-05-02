@@ -6,7 +6,7 @@ description: >
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 10m
+lookback: 11m
 mql: 'protocol:telnet AND action:successful'
 group_by: ip
 threshold: 1

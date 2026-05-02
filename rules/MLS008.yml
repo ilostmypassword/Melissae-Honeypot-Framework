@@ -6,10 +6,10 @@ description: >
 severity: high
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 5m
+lookback: 1m
 mql: 'protocol:ssh AND action:Failed'
 group_by: ip
-threshold: 5
-score: 35
+threshold: 3
+score: 25
 tags: [brute-force, credential-access]
 mitre: [T1110]

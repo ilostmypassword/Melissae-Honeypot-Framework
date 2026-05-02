@@ -5,11 +5,11 @@ description: >
   honeypot. Indicates hands-on activity post-authentication.
 severity: critical
 enabled: true
-schedule: "*/2 * * * *"
-lookback: 15m
+schedule: "*/1 * * * *"
+lookback: 1m
 mql: 'protocol:ftp AND (action:PUT OR action:GET OR action:DELETE OR action:RMDIR)'
 group_by: ip
 threshold: 1
-score: 20
+score: 70
 tags: [post-compromise, file-transfer]
 mitre: [T1105]

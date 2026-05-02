@@ -6,7 +6,7 @@ description: >
 severity: high
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 15m
+lookback: 1m
 mql: 'protocol:modbus AND action:write'
 group_by: ip
 threshold: 1

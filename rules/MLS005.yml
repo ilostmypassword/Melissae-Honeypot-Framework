@@ -1,15 +1,15 @@
 id: MLS005
 name: HTTP request burst (Web Scanning)
 description: >
-  Burst of HTTP requests from the same source (>=20 in 5 minutes).
+  Burst of HTTP requests from the same source (>=5 in 1 minute).
   Typical of automated scanners or fuzzers.
 severity: low
 enabled: true
-schedule: "*/2 * * * *"
-lookback: 5m
+schedule: "*/1 * * * *"
+lookback: 1m
 mql: 'protocol:http'
 group_by: ip
-threshold: 20
-score: 15
+threshold: 5
+score: 10
 tags: [recon, scan]
 mitre: [T1595]

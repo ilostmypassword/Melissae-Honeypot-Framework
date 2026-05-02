@@ -4,7 +4,7 @@ description: An attacker authenticated successfully against the FTP honeypot.
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 10m
+lookback: 1m
 mql: 'protocol:ftp AND action:Login successful'
 group_by: ip
 threshold: 1
