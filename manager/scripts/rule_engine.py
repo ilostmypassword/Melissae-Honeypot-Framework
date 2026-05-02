@@ -269,8 +269,6 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
         for log in group_logs:
             log_uid = _log_unique_id(log)
             aid = _alert_id(rule["id"], log_uid)
-            # Use the log's own event time as the alert's created_at so the
-            # backlog reflects when the activity happened, not when the rule ran.
             event_time = _log_event_time(log) or now_iso
             doc = {
                 "rule_id": rule["id"],
