@@ -233,23 +233,23 @@ def parse_ssh_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
     return logs
 
 _FTP_CMD_LABELS = {
-    'DELE': 'Delete',
-    'MKD':  'Create directory',
-    'RMD':  'Remove directory',
-    'CWD':  'Change directory to',
-    'RNFR': 'Rename from',
-    'RNTO': 'Rename to',
-    'APPE': 'Append to file',
-    'SITE': 'Site command',
-    'RETR': 'Download file',
-    'STOR': 'Upload file',
-    'STOU': 'Upload file (unique)',
-    'LIST': 'List directory',
-    'NLST': 'List directory (names)',
-    'MLSD': 'List directory (machine)',
-    'MLST': 'File info (machine)',
-    'SIZE': 'Get file size',
-    'MDTM': 'Get file mtime',
+    'DELE': 'DELETE',
+    'MKD':  'MKDIR',
+    'RMD':  'RMDIR',
+    'CWD':  'CD',
+    'RNFR': 'RENAME FROM',
+    'RNTO': 'RENAME TO',
+    'APPE': 'APPEND',
+    'SITE': 'SITE',
+    'RETR': 'GET',
+    'STOR': 'PUT',
+    'STOU': 'PUT',
+    'LIST': 'LIST',
+    'NLST': 'NLST',
+    'MLSD': 'MLSD',
+    'MLST': 'MLST',
+    'SIZE': 'SIZE',
+    'MDTM': 'MDTM',
 }
 
 # Parse FTP honeypot log lines
@@ -266,16 +266,18 @@ def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
                     cmd = match.group('cmd')
                     arg = (match.group('arg') or '').strip()
                     label = _FTP_CMD_LABELS.get(cmd, cmd)
-                    action = f"{label}: {arg}" if arg else label
+                    action = f"{label} {arg}" if arg else label
                     user = match.group('user') or None
                     logs.append(create_entry('ftp', dt, match.group('ip'), action, user=user))
                 elif pattern_name == 'transfer':
+                    verb = 'PUT' if match.group('type') == 'UPLOAD' else 'GET'
                     logs.append(create_entry('ftp', dt, match.group('ip'),
-                                             f"{match.group('type').capitalize()} of '{match.group('file')}' ({match.group('size')} bytes)",
+                                             f"{verb} {match.group('file')} ({match.group('size')} bytes)",
                                              user=match.group('user')))
                 elif pattern_name == 'transfer_fail':
+                    verb = 'PUT' if match.group('type') == 'UPLOAD' else 'GET'
                     logs.append(create_entry('ftp', dt, match.group('ip'),
-                                             f"Failed {match.group('type').lower()} of '{match.group('file')}'",
+                                             f"{verb} {match.group('file')} (failed)",
                                              user=match.group('user')))
                 elif pattern_name == 'connect':
                     logs.append(create_entry('ftp', dt, match.group('ip'), 'Connection established'))
