@@ -18,6 +18,18 @@ export default function Search() {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
+    const logId = searchParams.get('log_id')
+    if (logId) {
+      fetchLogs({ log_id: logId })
+        .then(data => {
+          setLogs(data)
+          setResults(data)
+          setSearchTerms([])
+        })
+        .catch(err => setError(err.message))
+        .finally(() => setLoading(false))
+      return
+    }
     fetchLogs()
       .then(data => {
         setLogs(data)
