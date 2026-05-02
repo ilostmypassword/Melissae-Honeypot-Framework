@@ -1,7 +1,31 @@
+import { useEffect, useState } from 'react'
 import { VerdictTag } from './Tags'
+import { fetchGeoIPDetails } from '../api'
+
+function formatLocation(geo) {
+  if (!geo || geo.public === false) return null
+  const parts = [geo.city, geo.region, geo.country_name || geo.country]
+    .map(p => (p || '').trim())
+    .filter(Boolean)
+  if (parts.length === 0) return null
+  return parts.join(', ')
+}
 
 // Modal showing detailed threat information
 export default function ThreatDetailModal({ threat, onClose }) {
+  const [geo, setGeo] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setGeo(null)
+    if (threat?.ip) {
+      fetchGeoIPDetails(threat.ip).then(data => {
+        if (!cancelled) setGeo(data)
+      })
+    }
+    return () => { cancelled = true }
+  }, [threat?.ip])
+
   if (!threat) return null
 
   const score = Number.isFinite(threat['protocol-score'])
@@ -11,6 +35,8 @@ export default function ThreatDetailModal({ threat, onClose }) {
     ? `${Math.round(threat.confidence * 100)}%`
     : 'N/A'
   const reasons = Array.isArray(threat.reasons) ? threat.reasons : []
+  const location = formatLocation(geo)
+  const isPublicIP = geo && geo.public !== false
 
   return (
     <div
@@ -58,6 +84,14 @@ export default function ThreatDetailModal({ threat, onClose }) {
               </strong>
             </div>
           ))}
+          {isPublicIP && (
+            <div className="bg-surface-tertiary rounded-lg p-3 col-span-2">
+              <span className="text-xs text-text-muted block">Location</span>
+              <strong className="block text-text-primary mt-1 font-mono text-sm">
+                {location || 'Unknown'}
+              </strong>
+            </div>
+          )}
         </div>
 
         {/* Reasons */}

@@ -104,7 +104,7 @@ export default function AttackerStats() {
         </div>
         <div className="lg:col-span-2 glass-card p-5">
           <h3 className="section-title mb-4">Top Attackers</h3>
-          <TopAttackersList logs={filteredLogs} geoData={geoData} onIPClick={ip => goSearch(`ip:${ip}`)} limit={15} />
+          <TopAttackersList logs={filteredLogs} geoData={geoData} onIPClick={ip => goSearch(`ip:${ip}`)} limit={5} />
         </div>
       </div>
 

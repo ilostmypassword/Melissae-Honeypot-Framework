@@ -32,6 +32,21 @@ export async function fetchKillchain(ip) {
 }
 
 const geoCache = {}
+const geoDetailsCache = {}
+
+export async function fetchGeoIPDetails(ip) {
+  if (!ip) return null
+  if (ip in geoDetailsCache) return geoDetailsCache[ip]
+  try {
+    const res = await fetch(`${API_BASE}/geoip/${encodeURIComponent(ip)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    geoDetailsCache[ip] = data
+    return data
+  } catch {
+    return null
+  }
+}
 
 export async function fetchGeoIP(ips) {
   const uncached = ips.filter(ip => !(ip in geoCache))

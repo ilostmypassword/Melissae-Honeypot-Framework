@@ -288,6 +288,64 @@ def api_geoip():
 
     return jsonify(result)
 
+@app.route("/api/geoip/<ip>", methods=["GET"])
+# GET /api/geoip/<ip> — Detailed geolocation for a single public IP
+def api_geoip_details(ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return jsonify({"error": "Invalid IP address"}), 400
+
+    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_multicast:
+        return jsonify({"public": False}), 200
+
+    ip_str = str(addr)
+
+    try:
+        db = get_db()
+        cache = db["geoip_cache"]
+        doc = cache.find_one({"_id": ip_str}) or {}
+
+        needs_refresh = not all(k in doc for k in ("country_name", "city", "region_name"))
+
+        if needs_refresh:
+            try:
+                payload = json.dumps(
+                    [{"query": ip_str, "fields": "query,countryCode,country,regionName,city"}]
+                ).encode()
+                req = urllib.request.Request(
+                    "http://ip-api.com/batch",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    api_result = json.loads(resp.read())
+                    if api_result and isinstance(api_result, list):
+                        entry = api_result[0]
+                        doc = {
+                            "country": entry.get("countryCode", "??"),
+                            "country_name": entry.get("country", ""),
+                            "region_name": entry.get("regionName", ""),
+                            "city": entry.get("city", ""),
+                            "cached_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        cache.update_one({"_id": ip_str}, {"$set": doc}, upsert=True)
+            except Exception:
+                pass
+
+        return jsonify({
+            "public": True,
+            "ip": ip_str,
+            "country": doc.get("country", "??"),
+            "country_name": doc.get("country_name", ""),
+            "region": doc.get("region_name", ""),
+            "city": doc.get("city", ""),
+        })
+
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
 @app.route("/api/enroll", methods=["POST"])
 # POST /api/enroll — Agent enrollment with one-time token
 def api_enroll():
