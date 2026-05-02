@@ -190,6 +190,19 @@ def _alert_id(rule_id: str, log_id: str) -> str:
     return hashlib.sha256(f"{rule_id}|{log_id}".encode("utf-8")).hexdigest()
 
 
+def _log_event_time(log: Dict) -> Optional[str]:
+    ts = log.get("timestamp")
+    if isinstance(ts, str) and ts:
+        return ts.replace(" ", "T", 1)
+    date = log.get("date")
+    hour = log.get("hour")
+    if isinstance(date, str) and date:
+        if isinstance(hour, str) and hour:
+            return f"{date}T{hour}"
+        return f"{date}T00:00:00"
+    return None
+
+
 def _log_unique_id(log: Dict) -> str:
     """Stable id for a log: prefer stored hash/_id, fall back to digest of key fields."""
     for k in ("_id", "hash"):
@@ -256,6 +269,9 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
         for log in group_logs:
             log_uid = _log_unique_id(log)
             aid = _alert_id(rule["id"], log_uid)
+            # Use the log's own event time as the alert's created_at so the
+            # backlog reflects when the activity happened, not when the rule ran.
+            event_time = _log_event_time(log) or now_iso
             doc = {
                 "rule_id": rule["id"],
                 "rule_name": rule["name"],
@@ -282,7 +298,8 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
                     "timestamp":  log.get("timestamp"),
                     "agent_id":   log.get("agent_id"),
                 },
-                "updated_at": now_iso,
+                "detected_at": now_iso,
+                "updated_at":  now_iso,
             }
             ops.append(UpdateOne(
                 {"_id": aid},
@@ -290,7 +307,7 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
                     "$setOnInsert": {
                         "_id": aid,
                         "status": "new",
-                        "created_at": now_iso,
+                        "created_at": event_time,
                     },
                     "$set": doc,
                 },

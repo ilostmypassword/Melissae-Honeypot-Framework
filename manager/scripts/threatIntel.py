@@ -194,7 +194,8 @@ def _compute_confidence(bucket: Dict) -> float:
 
 
 def _compute_threat(ip: str, bucket: Dict) -> Dict:
-    score = min(100, sum(r["score"] for r in bucket["rules"].values()))
+    # Each alert contributes its rule score (capped at 100 overall).
+    score = min(100, sum(r["score"] * r["count"] for r in bucket["rules"].values()))
     if score >= VERDICT_MALICIOUS:
         verdict = "malicious"
     elif score >= VERDICT_SUSPICIOUS:
