@@ -6,6 +6,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import secrets
 import urllib.request
 from datetime import datetime, timezone, timedelta
@@ -422,6 +423,187 @@ def api_agents():
         return jsonify(data)
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
+
+
+MAX_RESULTS_ALERTS = 5000
+VALID_ALERT_STATUSES = {"new", "acknowledged", "resolved"}
+VALID_SEVERITIES = {"low", "medium", "high", "critical"}
+RULES_DIR = os.getenv("MELISSAE_RULES_DIR", "/rules")
+
+
+@app.route("/api/alerts", methods=["GET"])
+# GET /api/alerts — Paginated alerts backlog with filters
+def api_alerts():
+    try:
+        db = get_db()
+        query = {}
+
+        status = request.args.get("status")
+        if status:
+            statuses = [s.strip() for s in status.split(",") if s.strip() in VALID_ALERT_STATUSES]
+            if statuses:
+                query["status"] = {"$in": statuses}
+
+        severity = request.args.get("severity")
+        if severity:
+            sevs = [s.strip() for s in severity.split(",") if s.strip() in VALID_SEVERITIES]
+            if sevs:
+                query["severity"] = {"$in": sevs}
+
+        rule_id = request.args.get("rule_id")
+        if rule_id:
+            query["rule_id"] = _sanitize_str(rule_id, 64)
+
+        ip_filter = request.args.get("ip")
+        if ip_filter:
+            try:
+                ipaddress.ip_address(ip_filter)
+                query["ip"] = ip_filter
+            except ValueError:
+                return jsonify({"error": "Invalid IP"}), 400
+
+        agent_id = request.args.get("agent_id")
+        if agent_id:
+            query["agent_id"] = _sanitize_str(agent_id, 64)
+
+        try:
+            limit = max(1, min(int(request.args.get("limit", 500)), MAX_RESULTS_ALERTS))
+            skip = max(0, int(request.args.get("skip", 0)))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid pagination parameters"}), 400
+
+        cursor = db["alerts"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+        return jsonify(list(cursor))
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/alerts/count", methods=["GET"])
+# GET /api/alerts/count — Counts grouped by status (for navbar badge)
+def api_alerts_count():
+    try:
+        db = get_db()
+        pipeline = [{"$group": {"_id": "$status", "n": {"$sum": 1}}}]
+        out = {"new": 0, "acknowledged": 0, "resolved": 0, "total": 0}
+        for row in db["alerts"].aggregate(pipeline):
+            status = row.get("_id") or "new"
+            if status in out:
+                out[status] = int(row.get("n", 0))
+            out["total"] += int(row.get("n", 0))
+        return jsonify(out)
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/alerts/<alert_id>/status", methods=["POST", "PATCH"])
+# POST /api/alerts/<id>/status — Update an alert's lifecycle status
+def api_alerts_set_status(alert_id):
+    if not re.match(r"^[a-f0-9]{32,128}$", alert_id):
+        return jsonify({"error": "Invalid alert id"}), 400
+
+    data = request.get_json(silent=True) or {}
+    new_status = str(data.get("status", "")).lower().strip()
+    if new_status not in VALID_ALERT_STATUSES:
+        return jsonify({"error": "Invalid status"}), 400
+
+    try:
+        db = get_db()
+        result = db["alerts"].update_one(
+            {"_id": alert_id},
+            {"$set": {
+                "status": new_status,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        if result.matched_count == 0:
+            return jsonify({"error": "Alert not found"}), 404
+        return jsonify({"status": "ok", "alert_id": alert_id, "new_status": new_status})
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/alerts/bulk-status", methods=["POST"])
+# POST /api/alerts/bulk-status — Update many alerts at once
+def api_alerts_bulk_status():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    new_status = str(data.get("status", "")).lower().strip()
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "Missing ids"}), 400
+    if new_status not in VALID_ALERT_STATUSES:
+        return jsonify({"error": "Invalid status"}), 400
+
+    safe_ids = [i for i in ids if isinstance(i, str) and re.match(r"^[a-f0-9]{32,128}$", i)]
+    if not safe_ids:
+        return jsonify({"error": "No valid ids"}), 400
+    if len(safe_ids) > 1000:
+        return jsonify({"error": "Too many ids (max 1000)"}), 413
+
+    try:
+        db = get_db()
+        result = db["alerts"].update_many(
+            {"_id": {"$in": safe_ids}},
+            {"$set": {
+                "status": new_status,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return jsonify({"status": "ok", "updated": result.modified_count})
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
+
+@app.route("/api/rules", methods=["GET"])
+# GET /api/rules — List rules with last-run metadata
+def api_rules():
+    rules = []
+    try:
+        if os.path.isdir(RULES_DIR):
+            import yaml
+            for fname in sorted(os.listdir(RULES_DIR)):
+                if not fname.endswith((".yml", ".yaml")):
+                    continue
+                fpath = os.path.join(RULES_DIR, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        raw = yaml.safe_load(f)
+                except (OSError, yaml.YAMLError):
+                    continue
+                if not isinstance(raw, dict):
+                    continue
+                rules.append({
+                    "id": raw.get("id"),
+                    "name": raw.get("name"),
+                    "description": raw.get("description"),
+                    "severity": raw.get("severity", "medium"),
+                    "enabled": bool(raw.get("enabled", True)),
+                    "schedule": raw.get("schedule"),
+                    "lookback": raw.get("lookback"),
+                    "mql": raw.get("mql"),
+                    "group_by": raw.get("group_by", "ip"),
+                    "threshold": raw.get("threshold", 1),
+                    "score": raw.get("score", 0),
+                    "tags": raw.get("tags") or [],
+                    "mitre": raw.get("mitre") or [],
+                    "source_file": fname,
+                })
+    except OSError:
+        return jsonify({"error": "Rules directory unavailable"}), 500
+
+    try:
+        db = get_db()
+        runs = {doc["_id"]: doc for doc in db["rule_runs"].find({})}
+        for r in rules:
+            run = runs.get(r["id"])
+            if run:
+                r["last_run_at"] = run.get("last_run_at")
+                r["last_alerts_emitted"] = run.get("last_alerts_emitted", 0)
+                r["last_groups_triggered"] = run.get("last_groups_triggered", 0)
+    except PyMongoError:
+        pass
+
+    return jsonify(rules)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

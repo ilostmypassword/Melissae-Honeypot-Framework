@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { fetchAlertCounts } from '../api'
+
+const ALERT_BADGE_REFRESH = 20_000
 
 const navSections = [
   {
@@ -7,6 +10,12 @@ const navSections = [
     items: [
       { to: '/', label: 'Dashboard', icon: DashboardIcon },
       { to: '/agents', label: 'Agents', icon: AgentIcon },
+    ],
+  },
+  {
+    label: 'Detection',
+    items: [
+      { to: '/alerts', label: 'Alerts', icon: AlertIcon, badge: 'alerts' },
     ],
   },
   {
@@ -35,6 +44,7 @@ const navSections = [
 export default function Layout({ children }) {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [alertBadge, setAlertBadge] = useState(0)
 
   // Close sidebar on route change (mobile nav)
   useEffect(() => {
@@ -47,6 +57,24 @@ export default function Layout({ children }) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  // Poll the active-alerts count for the navbar badge
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const c = await fetchAlertCounts()
+        if (!cancelled) setAlertBadge((c?.new ?? 0) + (c?.acknowledged ?? 0))
+      } catch {
+        /* ignore: best-effort */
+      }
+    }
+    tick()
+    const t = setInterval(tick, ALERT_BADGE_REFRESH)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
+
+  const badgeValue = key => (key === 'alerts' ? alertBadge : 0)
 
   return (
     <div className="min-h-screen flex">
@@ -99,6 +127,7 @@ export default function Layout({ children }) {
                   const isActive = item.to === '/'
                     ? location.pathname === '/'
                     : location.pathname.startsWith(item.to)
+                  const badgeCount = item.badge ? badgeValue(item.badge) : 0
                   return (
                     <NavLink
                       key={item.to}
@@ -113,7 +142,12 @@ export default function Layout({ children }) {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent" />
                       )}
                       <item.icon active={isActive} />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate flex-1">{item.label}</span>
+                      {badgeCount > 0 && (
+                        <span className="shrink-0 ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-verdict-malicious text-white text-[10px] font-bold leading-none">
+                          {badgeCount > 99 ? '99+' : badgeCount}
+                        </span>
+                      )}
                     </NavLink>
                   )
                 })}
@@ -222,6 +256,15 @@ function AttackerIcon({ active }) {
       <line x1="12" y1="18" x2="12" y2="22" />
       <line x1="2" y1="12" x2="6" y2="12" />
       <line x1="18" y1="12" x2="22" y2="12" />
+    </svg>
+  )
+}
+
+function AlertIcon({ active }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-colors ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'}`}>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   )
 }

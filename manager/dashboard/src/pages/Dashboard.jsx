@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { fetchLogs, fetchAgents } from '../api'
+import { Link, useNavigate } from 'react-router-dom'
+import { fetchLogs, fetchAgents, fetchAlerts } from '../api'
 import StatCard from '../components/StatCard'
+import { SeverityTag } from '../components/Tags'
 import { DailyChart, ProtocolChart, ProtocolTimelineChart } from '../components/charts'
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 
@@ -17,6 +18,7 @@ const DATE_RANGES = [
 export default function Dashboard() {
   const [logs, setLogs] = useState([])
   const [agents, setAgents] = useState([])
+  const [recentAlerts, setRecentAlerts] = useState([])
   const [selectedAgent, setSelectedAgent] = useState('')
   const [dateRange, setDateRange] = useState('all')
   const [loading, setLoading] = useState(true)
@@ -29,12 +31,14 @@ export default function Dashboard() {
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
     try {
-      const [logsData, agentsData] = await Promise.all([
+      const [logsData, agentsData, alertsData] = await Promise.all([
         fetchLogs(),
         fetchAgents().catch(() => []),
+        fetchAlerts({ status: 'new,acknowledged', limit: 5 }).catch(() => []),
       ])
       setLogs(logsData)
       setAgents(agentsData)
+      setRecentAlerts(Array.isArray(alertsData) ? alertsData.slice(0, 5) : [])
       setLastRefresh(Date.now())
       setError(null)
     } catch (err) {
@@ -76,13 +80,6 @@ export default function Dashboard() {
   const s = computeStats(filteredLogs)
   const prevS = computeTrend(logs, selectedAgent)
   const healthyAgents = agents.filter(a => a.status === 'healthy').length
-
-  const alerts = []
-  if (s.cveLogs > 0) alerts.push({ label: 'CVE Exploits', value: s.cveLogs, query: 'cve:CVE' })
-  if (s.successSSH > 0) alerts.push({ label: 'SSH Logins', value: s.successSSH, query: 'action:successful AND protocol:ssh' })
-  if (s.successFTP > 0) alerts.push({ label: 'FTP Logins', value: s.successFTP, query: 'action:successful AND protocol:ftp' })
-  if (s.successTelnet > 0) alerts.push({ label: 'Telnet Sessions', value: s.successTelnet, query: 'action:session AND protocol:telnet' })
-  if (s.modbusWrites > 0) alerts.push({ label: 'Modbus Writes', value: s.modbusWrites, query: 'action:write AND protocol:modbus' })
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -130,40 +127,43 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Critical Events Banner — shown immediately if alerts exist */}
-      {alerts.length > 0 && (
-        <div className="relative overflow-hidden rounded-xl border border-verdict-malicious/25 bg-verdict-malicious/[0.04]">
-          {/* Left accent stripe */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-verdict-malicious rounded-l-xl" />
-          <div className="pl-4 pr-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2.5">
-            {/* Icon + title */}
-            <div className="flex items-center gap-2.5 shrink-0">
+      {/* Recent alerts widget */}
+      {recentAlerts.length > 0 && (
+        <div className="glass-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
               </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-verdict-malicious">
-                Critical Events
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-verdict-malicious/15 text-verdict-malicious border border-verdict-malicious/20">
-                {alerts.length}
+              <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
+                Recent alerts
               </span>
             </div>
-            {/* Divider (desktop) */}
-            <div className="hidden sm:block w-px h-5 bg-verdict-malicious/20 shrink-0" />
-            {/* Alert chips */}
-            <div className="flex flex-wrap gap-2">
-              {alerts.map(a => (
-                <button
-                  key={a.label}
-                  onClick={() => goSearch(a.query)}
-                  className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-verdict-malicious/20 bg-verdict-malicious/[0.06] hover:bg-verdict-malicious/15 hover:border-verdict-malicious/40 transition-all duration-200"
-                >
-                  <span className="text-sm font-bold font-mono text-verdict-malicious">{formatNumber(a.value)}</span>
-                  <span className="text-xs text-verdict-malicious/80 group-hover:text-verdict-malicious transition-colors">{a.label}</span>
-                </button>
-              ))}
-            </div>
+            <Link
+              to="/alerts"
+              className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors"
+            >
+              View all →
+            </Link>
+          </div>
+          <div className="flex flex-col divide-y divide-border/40">
+            {recentAlerts.map(a => (
+              <Link
+                key={a._id}
+                to="/alerts"
+                className="flex items-center gap-3 py-2 hover:bg-surface-hover/30 -mx-2 px-2 rounded-md transition-colors"
+              >
+                <SeverityTag severity={a.severity} />
+                <span className="text-xs font-semibold text-text-primary truncate flex-1">
+                  {a.rule_name || a.rule_id}
+                </span>
+                {a.ip && (
+                  <code className="text-[11px] font-mono text-text-secondary shrink-0">{a.ip}</code>
+                )}
+                <span className="text-[10px] text-text-muted shrink-0 font-mono">+{a.score}</span>
+              </Link>
+            ))}
           </div>
         </div>
       )}

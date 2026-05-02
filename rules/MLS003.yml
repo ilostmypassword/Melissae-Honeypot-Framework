@@ -1,0 +1,15 @@
+id: MLS003
+name: Malicious FTP file activity
+description: >
+  Upload, download or destructive command (DELETE, RMDIR) on the FTP
+  honeypot. Indicates hands-on activity post-authentication.
+severity: medium
+enabled: true
+schedule: "*/2 * * * *"
+lookback: 15m
+mql: 'protocol:ftp AND (action:PUT OR action:GET OR action:DELETE OR action:RMDIR)'
+group_by: ip
+threshold: 1
+score: 20
+tags: [post-compromise, file-transfer]
+mitre: [T1105]

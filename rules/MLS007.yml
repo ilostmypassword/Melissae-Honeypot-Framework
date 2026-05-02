@@ -1,0 +1,15 @@
+id: MLS007
+name: Modbus write operation (ICS tampering)
+description: >
+  Write operation against the Modbus/TCP honeypot. ICS tampering is
+  considered high-impact and should always trigger.
+severity: high
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 15m
+mql: 'protocol:modbus AND action:write'
+group_by: ip
+threshold: 1
+score: 45
+tags: [ics, tampering]
+mitre: [T0831, T0836]

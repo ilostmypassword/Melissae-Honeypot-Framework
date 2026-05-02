@@ -1,0 +1,13 @@
+id: MLS002
+name: FTP brute-force attempt
+description: Multiple FTP login failures from the same IP.
+severity: medium
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 5m
+mql: 'protocol:ftp AND action:Login failed'
+group_by: ip
+threshold: 5
+score: 25
+tags: [brute-force, credential-access]
+mitre: [T1110]

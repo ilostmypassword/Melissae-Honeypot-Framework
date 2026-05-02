@@ -1,0 +1,20 @@
+id: MLS009
+name: Post-compromise SSH command
+description: >
+  Reconnaissance or fetcher-style command observed in an SSH session
+  (wget, curl, chmod +x, /etc/passwd, base64, ...). Strong indicator of
+  hands-on-keyboard activity after a successful login.
+severity: high
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 10m
+mql: >
+  protocol:ssh AND
+  (action:wget OR action:curl OR action:chmod OR action:/etc/passwd
+   OR action:/etc/shadow OR action:base64 OR action:nmap OR action:useradd
+   OR action:ssh-keygen OR action:crontab)
+group_by: ip
+threshold: 1
+score: 35
+tags: [post-compromise, recon, execution]
+mitre: [T1059, T1083]

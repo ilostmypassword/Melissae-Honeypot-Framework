@@ -1,0 +1,15 @@
+id: MLS008
+name: SSH brute-force attempt
+description: >
+  Multiple SSH authentication failures from the same IP within a short
+  window. Indicates credential-stuffing or brute-force activity.
+severity: high
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 5m
+mql: 'protocol:ssh AND action:Failed'
+group_by: ip
+threshold: 5
+score: 35
+tags: [brute-force, credential-access]
+mitre: [T1110]

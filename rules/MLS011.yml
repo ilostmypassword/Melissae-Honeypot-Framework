@@ -1,0 +1,15 @@
+id: MLS011
+name: Successful Telnet login
+description: >
+  Telnet is a deprecated protocol; any successful login is treated as
+  malicious.
+severity: critical
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 10m
+mql: 'protocol:telnet AND action:successful'
+group_by: ip
+threshold: 1
+score: 60
+tags: [credential-access, iot-botnet]
+mitre: [T1078]

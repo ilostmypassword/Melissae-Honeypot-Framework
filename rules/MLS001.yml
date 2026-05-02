@@ -1,0 +1,15 @@
+id: MLS001
+name: CVE exploitation attempt
+description: >
+  Activity hitting a CVE-tagged honeypot module (e.g. CVE-2026-24061).
+  Treated as confirmed targeted exploitation.
+severity: critical
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 15m
+mql: 'cve:CVE'
+group_by: ip
+threshold: 1
+score: 70
+tags: [exploitation, cve]
+mitre: [T1190]
