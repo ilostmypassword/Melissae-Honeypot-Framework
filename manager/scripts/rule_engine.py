@@ -22,6 +22,8 @@ RULES_DIR = os.getenv("MELISSAE_RULES_DIR",
 VALID_SEVERITIES = ("low", "medium", "high", "critical")
 SEVERITY_RANK = {s: i for i, s in enumerate(VALID_SEVERITIES)}
 
+ALERT_RETENTION_DAYS = 90
+
 _LOOKBACK_RE = re.compile(r"^\s*(\d+)\s*([smhd])\s*$", re.IGNORECASE)
 
 
@@ -306,6 +308,7 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
                         "_id": aid,
                         "status": "new",
                         "created_at": event_time,
+                        "expires_at": now + timedelta(days=ALERT_RETENTION_DAYS),
                     },
                     "$set": doc,
                 },
@@ -377,6 +380,7 @@ def _ensure_indexes(db) -> None:
         db["alerts"].create_index("status")
         db["alerts"].create_index("severity")
         db["alerts"].create_index([("created_at", -1)])
+        db["alerts"].create_index("expires_at", expireAfterSeconds=0)
     except PyMongoError:
         pass
 

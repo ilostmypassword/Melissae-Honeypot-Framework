@@ -100,7 +100,12 @@ def api_killchain(ip):
 
     try:
         db = get_db()
-        logs = list(db["logs"].find({"ip": ip}, {"_id": 0}))
+        logs = list(
+            db["logs"]
+            .find({"ip": ip}, {"_id": 0})
+            .sort("timestamp", -1)
+            .limit(5000)
+        )
 
         events = []
         for log in logs:
