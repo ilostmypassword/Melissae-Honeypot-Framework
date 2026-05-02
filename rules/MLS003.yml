@@ -3,7 +3,7 @@ name: Malicious FTP file activity
 description: >
   Upload, download or destructive command (DELETE, RMDIR) on the FTP
   honeypot. Indicates hands-on activity post-authentication.
-severity: medium
+severity: critical
 enabled: true
 schedule: "*/2 * * * *"
 lookback: 15m
