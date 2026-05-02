@@ -11,6 +11,6 @@ lookback: 1m
 mql: 'protocol:ssh AND action:successful'
 group_by: ip
 threshold: 1
-score: 65
+score: 70
 tags: [credential-access, lateral-movement]
 mitre: [T1078]
