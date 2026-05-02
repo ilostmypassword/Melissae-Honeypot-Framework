@@ -64,7 +64,7 @@ export default function Layout({ children }) {
     const tick = async () => {
       try {
         const c = await fetchAlertCounts()
-        if (!cancelled) setAlertBadge((c?.new ?? 0) + (c?.acknowledged ?? 0))
+        if (!cancelled) setAlertBadge(c?.new ?? 0)
       } catch {
         /* ignore: best-effort */
       }
