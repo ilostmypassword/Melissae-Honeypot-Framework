@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 _FIELD_GETTERS = {
     "protocol":   lambda log: log.get("protocol", ""),
@@ -23,93 +23,126 @@ def _match_hour(log_hour: str, search_value: str) -> bool:
     return log_h == search_h
 
 
-def _match_term(log: Dict, term: str) -> bool:
+def _match_simple_term(log: Dict, term: str) -> bool:
+    """Match a single field:value or bareword term."""
     term = term.strip()
     if not term:
         return False
-
-    negation = False
-    m = re.match(r"^(NOT\s+|!)", term, re.IGNORECASE)
-    if m:
-        negation = True
-        term = term[m.end():].strip()
 
     if ":" in term:
         field, _, value = term.partition(":")
         field = field.strip().lower()
         value = value.strip().lower()
         if not value:
-            return False if not negation else True
-
+            return False
         if field == "hour":
-            matched = _match_hour(log.get("hour", ""), value)
-        else:
-            getter = _FIELD_GETTERS.get(field)
-            if getter is None:
-                matched = False
-            else:
-                matched = value in str(getter(log) or "").lower()
-    else:
-        needle = term.lower()
-        matched = any(needle in str(v or "").lower() for v in log.values())
+            return _match_hour(log.get("hour", ""), value)
+        getter = _FIELD_GETTERS.get(field)
+        if getter is None:
+            return False
+        return value in str(getter(log) or "").lower()
 
-    return (not matched) if negation else matched
+    needle = term.lower()
+    return any(needle in str(v or "").lower() for v in log.values())
 
 
-_OPERATOR_RE = re.compile(r"(\bAND\b|\bOR\b)", re.IGNORECASE)
+# Tokenizer: parens, AND/OR/NOT keywords, '!' prefix, or run of non-space non-paren chars.
+_TOKEN_RE = re.compile(r'\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s()]+', re.IGNORECASE)
+
+_KEYWORDS = {"AND", "OR", "NOT"}
 
 
-def _parse_groups(query: str) -> List[Tuple[str, List[str]]]:
-    """Split query on AND/OR. Returns list of (operator_to_combine_with_previous, terms)."""
-    parts = _OPERATOR_RE.split(query)
-    groups: List[Tuple[str, List[str]]] = []
-    current: List[str] = []
-    last_op = "AND"
+def _tokenize(query: str) -> List[str]:
+    return [m.group(0) for m in _TOKEN_RE.finditer(query)]
 
-    for part in parts:
-        chunk = part.strip()
-        if not chunk:
-            continue
-        upper = chunk.upper()
-        if upper == "AND":
-            if current:
-                groups.append((last_op, current))
-                current = []
-            last_op = "AND"
-        elif upper == "OR":
-            if current:
-                groups.append((last_op, current))
-                current = []
-            last_op = "OR"
-        else:
-            if len(chunk) >= 2:
-                if ":" in chunk and chunk.split(":", 1)[1].strip() == "":
-                    continue
-                current.append(chunk)
 
-    if current:
-        groups.append((last_op, current))
-    return groups
+class _Parser:
+    def __init__(self, tokens: List[str]):
+        self.tokens = tokens
+        self.pos = 0
+
+    def _peek(self) -> Optional[str]:
+        return self.tokens[self.pos] if self.pos < len(self.tokens) else None
+
+    def _peek_upper(self) -> Optional[str]:
+        tok = self._peek()
+        return tok.upper() if tok is not None else None
+
+    def _consume(self) -> Optional[str]:
+        if self.pos < len(self.tokens):
+            tok = self.tokens[self.pos]
+            self.pos += 1
+            return tok
+        return None
+
+    def parse_or(self) -> Tuple:
+        left = self.parse_and()
+        while self._peek_upper() == "OR":
+            self._consume()
+            right = self.parse_and()
+            left = ("OR", left, right)
+        return left
+
+    def parse_and(self) -> Tuple:
+        left = self.parse_factor()
+        while True:
+            nxt = self._peek_upper()
+            if nxt is None or nxt == ")" or nxt == "OR":
+                break
+            if nxt == "AND":
+                self._consume()
+            # else implicit AND between adjacent factors
+            right = self.parse_factor()
+            left = ("AND", left, right)
+        return left
+
+    def parse_factor(self) -> Tuple:
+        tok = self._peek()
+        if tok is None:
+            return ("TRUE",)
+        upper = tok.upper()
+        if upper == "NOT" or tok == "!":
+            self._consume()
+            inner = self.parse_factor()
+            return ("NOT", inner)
+        if tok == "(":
+            self._consume()
+            inner = self.parse_or()
+            if self._peek() == ")":
+                self._consume()
+            return inner
+        if upper in _KEYWORDS or tok == ")":
+            self._consume()
+            return ("TRUE",)
+        self._consume()
+        return ("TERM", tok)
+
+
+def _eval(node: Tuple, log: Dict) -> bool:
+    op = node[0]
+    if op == "TRUE":
+        return True
+    if op == "TERM":
+        return _match_simple_term(log, node[1])
+    if op == "NOT":
+        return not _eval(node[1], log)
+    if op == "AND":
+        return _eval(node[1], log) and _eval(node[2], log)
+    if op == "OR":
+        return _eval(node[1], log) or _eval(node[2], log)
+    return False
 
 
 def match_log(log: Dict, query: str) -> bool:
     """Return True if a single log entry satisfies the MQL query."""
     if not query or not query.strip():
         return True
-    groups = _parse_groups(query)
-    if not groups:
-        return False
-
-    accumulator = None  # bool result so far
-    for idx, (op, terms) in enumerate(groups):
-        group_match = all(_match_term(log, t) for t in terms)
-        if idx == 0:
-            accumulator = group_match
-        elif op == "AND":
-            accumulator = accumulator and group_match
-        else:  # OR
-            accumulator = accumulator or group_match
-    return bool(accumulator)
+    tokens = _tokenize(query)
+    if not tokens:
+        return True
+    parser = _Parser(tokens)
+    tree = parser.parse_or()
+    return _eval(tree, log)
 
 
 def filter_logs(logs: Iterable[Dict], query: str) -> List[Dict]:
