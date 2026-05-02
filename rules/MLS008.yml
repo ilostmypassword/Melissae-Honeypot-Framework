@@ -10,6 +10,6 @@ lookback: 1m
 mql: 'protocol:ssh AND action:Failed'
 group_by: ip
 threshold: 3
-score: 25
+score: 40
 tags: [brute-force, credential-access]
 mitre: [T1110]

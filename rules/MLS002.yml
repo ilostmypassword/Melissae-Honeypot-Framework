@@ -8,6 +8,6 @@ lookback: 5m
 mql: 'protocol:ftp AND action:Login failed'
 group_by: ip
 threshold: 5
-score: 25
+score: 30
 tags: [brute-force, credential-access]
 mitre: [T1110]
