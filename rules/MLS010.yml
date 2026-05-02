@@ -1,0 +1,16 @@
+id: MLS010
+name: Successful SSH login
+description: >
+  An attacker authenticated successfully against the SSH honeypot.
+  Honeypot accounts must never see legitimate logins, so any success
+  is malicious by definition.
+severity: critical
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 10m
+mql: 'protocol:ssh AND action:successful'
+group_by: ip
+threshold: 1
+score: 60
+tags: [credential-access, lateral-movement]
+mitre: [T1078]

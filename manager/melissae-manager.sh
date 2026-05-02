@@ -889,7 +889,7 @@ cmd_install() {
 
     info "Installing prerequisites..."
     sudo apt-get update > /dev/null 2>&1
-    sudo apt-get install -y ca-certificates curl cron apache2-utils python3-pymongo openssl > /dev/null 2>&1
+    sudo apt-get install -y ca-certificates curl cron apache2-utils python3-pymongo python3-yaml openssl > /dev/null 2>&1
     success "Prerequisites installed"
 
     if command -v docker >/dev/null 2>&1 && docker --version >/dev/null 2>&1; then

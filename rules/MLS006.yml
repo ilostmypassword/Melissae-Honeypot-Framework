@@ -1,0 +1,20 @@
+id: MLS006
+name: HTTP probing of sensitive paths
+description: >
+  Requests targeting admin panels, secrets, version-control or
+  framework consoles (/wp-admin, /.git, /.env, /actuator, /phpmyadmin).
+severity: medium
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 10m
+mql: >
+  protocol:http AND
+  (path:/wp-admin OR path:/wp-login OR path:/phpmyadmin OR path:/.git
+   OR path:/.env OR path:/admin OR path:/shell OR path:/cgi-bin
+   OR path:/xmlrpc OR path:/console OR path:/manager OR path:/actuator
+   OR path:/.aws OR path:/.ssh OR path:/passwd OR path:/backup)
+group_by: ip
+threshold: 1
+score: 20
+tags: [recon, web-scanner]
+mitre: [T1595, T1190]

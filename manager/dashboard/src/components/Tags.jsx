@@ -41,3 +41,44 @@ export function VerdictTag({ verdict }) {
   )
 }
 
+const severityStyles = {
+  low:      'bg-protocol-mqtt/15 text-protocol-mqtt',
+  medium:   'bg-verdict-suspicious/15 text-verdict-suspicious',
+  high:     'bg-protocol-ftp/15 text-protocol-ftp',
+  critical: 'bg-verdict-malicious/15 text-verdict-malicious',
+}
+
+// Colored tag for an alert severity
+export function SeverityTag({ severity }) {
+  const key = severity?.toLowerCase() || 'medium'
+  return (
+    <span
+      className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest ${
+        severityStyles[key] || 'bg-border text-text-secondary'
+      }`}
+    >
+      {(severity || 'unknown').toUpperCase()}
+    </span>
+  )
+}
+
+const alertStatusStyles = {
+  new:          'bg-verdict-malicious/15 text-verdict-malicious',
+  acknowledged: 'bg-verdict-suspicious/15 text-verdict-suspicious',
+  resolved:     'bg-verdict-benign/15 text-verdict-benign',
+}
+
+// Colored tag for an alert lifecycle status
+export function AlertStatusTag({ status }) {
+  const key = status?.toLowerCase() || 'new'
+  return (
+    <span
+      className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-widest ${
+        alertStatusStyles[key] || 'bg-border text-text-secondary'
+      }`}
+    >
+      {(status || 'new').toUpperCase()}
+    </span>
+  )
+}
+

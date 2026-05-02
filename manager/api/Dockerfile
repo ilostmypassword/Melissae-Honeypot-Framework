@@ -5,7 +5,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-RUN pip install --no-cache-dir flask flask-cors pymongo gunicorn
+RUN pip install --no-cache-dir flask flask-cors pymongo gunicorn pyyaml
 
 RUN adduser --disabled-password --gecos "" apiuser
 

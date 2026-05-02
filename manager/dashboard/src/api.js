@@ -69,3 +69,50 @@ export async function fetchGeoIP(ips) {
   return result
 }
 
+// Fetch alerts backlog with optional filters
+export async function fetchAlerts(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v != null && v !== '') params.set(k, v)
+  }
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/alerts${qs ? `?${qs}` : ''}`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
+// Fetch alert counts grouped by status (for the navbar badge)
+export async function fetchAlertCounts() {
+  const res = await fetch(`${API_BASE}/alerts/count`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
+// Update a single alert's status (new / acknowledged / resolved)
+export async function updateAlertStatus(alertId, status) {
+  const res = await fetch(`${API_BASE}/alerts/${encodeURIComponent(alertId)}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
+// Bulk update alerts status
+export async function updateAlertsBulk(ids, status) {
+  const res = await fetch(`${API_BASE}/alerts/bulk-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, status }),
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
+// Fetch the rule catalog
+export async function fetchRules() {
+  const res = await fetch(`${API_BASE}/rules`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}

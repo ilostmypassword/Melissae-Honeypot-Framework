@@ -18,8 +18,10 @@ services:
     environment:
       - MONGO_URI=mongodb://melissae_mongo:27017
       - MONGO_DB=melissae
+      - MELISSAE_RULES_DIR=/rules
     volumes:
       - ./pki/ca/certs:/certs:ro
+      - ../rules:/rules:ro
     ports:
       - "127.0.0.1:5000:5000"
     depends_on:
