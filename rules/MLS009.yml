@@ -4,7 +4,7 @@ description: >
   Reconnaissance or fetcher-style command observed in an SSH session
   (wget, curl, chmod +x, /etc/passwd, base64, ...). Strong indicator of
   hands-on-keyboard activity after a successful login.
-severity: high
+severity: critical
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 10m
