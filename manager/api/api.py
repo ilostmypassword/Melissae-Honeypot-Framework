@@ -490,12 +490,22 @@ def api_alerts_count():
     try:
         db = get_db()
         pipeline = [{"$group": {"_id": "$status", "n": {"$sum": 1}}}]
-        out = {"new": 0, "acknowledged": 0, "resolved": 0, "total": 0}
+        out = {"new": 0, "acknowledged": 0, "resolved": 0, "total": 0, "new_groups": 0}
         for row in db["alerts"].aggregate(pipeline):
             status = row.get("_id") or "new"
             if status in out:
                 out[status] = int(row.get("n", 0))
             out["total"] += int(row.get("n", 0))
+
+        group_pipeline = [
+            {"$match": {"status": "new"}},
+            {"$group": {"_id": {"rule_id": "$rule_id", "ip": "$ip"}}},
+            {"$count": "n"},
+        ]
+        rows = list(db["alerts"].aggregate(group_pipeline))
+        if rows:
+            out["new_groups"] = int(rows[0].get("n", 0))
+
         return jsonify(out)
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500

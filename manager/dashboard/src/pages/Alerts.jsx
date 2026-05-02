@@ -28,10 +28,9 @@ const STATUS_ORDER = { new: 0, acknowledged: 1, resolved: 2 }
 
 function sortAlerts(list) {
   return [...list].sort((a, b) => {
-    const s = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
-    if (s !== 0) return s
-    const sev = (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9)
-    if (sev !== 0) return sev
+    const aNew = a.status === 'new' ? 0 : 1
+    const bNew = b.status === 'new' ? 0 : 1
+    if (aNew !== bNew) return aNew - bNew
     return String(b.created_at || '').localeCompare(String(a.created_at || ''))
   })
 }
@@ -71,13 +70,9 @@ function buildGroups(list) {
   }
   return [...map.values()]
     .sort((a, b) => {
-      const aActive = (a.status_counts.new || 0) + (a.status_counts.acknowledged || 0)
-      const bActive = (b.status_counts.new || 0) + (b.status_counts.acknowledged || 0)
-      const ax = aActive > 0 ? 0 : 1
-      const bx = bActive > 0 ? 0 : 1
-      if (ax !== bx) return ax - bx
-      const sev = (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9)
-      if (sev !== 0) return sev
+      const aNew = (a.status_counts.new || 0) > 0 ? 0 : 1
+      const bNew = (b.status_counts.new || 0) > 0 ? 0 : 1
+      if (aNew !== bNew) return aNew - bNew
       return String(b.last_seen || '').localeCompare(String(a.last_seen || ''))
     })
     .map(g => ({
