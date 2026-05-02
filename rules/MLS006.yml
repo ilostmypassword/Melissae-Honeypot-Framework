@@ -6,7 +6,7 @@ description: >
 severity: medium
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 10m
+lookback: 1m
 mql: >
   protocol:http AND
   (path:/wp-admin OR path:/wp-login OR path:/phpmyadmin OR path:/.git
@@ -15,6 +15,6 @@ mql: >
    OR path:/.aws OR path:/.ssh OR path:/passwd OR path:/backup)
 group_by: ip
 threshold: 1
-score: 20
+score: 15
 tags: [recon, web-scanner]
 mitre: [T1595, T1190]

@@ -6,7 +6,7 @@ description: >
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 15m
+lookback: 1m
 mql: 'cve:CVE'
 group_by: ip
 threshold: 1
