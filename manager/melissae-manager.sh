@@ -927,14 +927,15 @@ cmd_install() {
     echo -e "  Detected IP:       ${WHITE}$manager_ip${RESET}"
     echo -e "  Detected hostname: ${WHITE}$manager_hostname${RESET}"
     echo
-    read -p "Public FQDN (e.g. manager.example.com) [${manager_hostname}]: " manager_fqdn
-    manager_fqdn=${manager_fqdn:-$manager_hostname}
+    read -p "Public FQDN or IP (e.g. manager.example.com) [${manager_ip}]: " manager_fqdn
+    manager_fqdn=${manager_fqdn:-$manager_ip}
 
     local san_args=("$manager_fqdn")
-    if [ "$manager_fqdn" != "$manager_hostname" ]; then
-        san_args+=("$manager_hostname")
+    # Only add manager_ip if the operator did not already enter it as FQDN
+    if [ "$manager_fqdn" != "$manager_ip" ]; then
+        san_args+=("$manager_ip")
     fi
-    san_args+=("$manager_ip" "localhost" "127.0.0.1")
+    san_args+=("localhost" "127.0.0.1")
 
     info "Generating manager certificate (SANs: ${san_args[*]})..."
     _CERT_CN="$manager_fqdn" _gen_cert "manager" "dual" "${san_args[@]}"
