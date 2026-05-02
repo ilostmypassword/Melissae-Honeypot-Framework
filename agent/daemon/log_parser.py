@@ -27,7 +27,8 @@ PATTERNS = {
             'connect': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] CONNECT: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)"'),
             'login': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] (?P<status>OK|FAIL) LOGIN: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)"'),
             'transfer': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] OK (?P<type>UPLOAD|DOWNLOAD): Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<file>.+?)", (?P<size>\d+) bytes'),
-            'command': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]*)\] FTP command: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<cmd>DELE|MKD|RMD|CWD|RNFR|RNTO|APPE|SITE)(?: (?P<arg>[^"]+))?"')
+            'transfer_fail': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]+)\] FAIL (?P<type>UPLOAD|DOWNLOAD): Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<file>.+?)",'),
+            'command': re.compile(r'(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) \[pid \d+\] \[(?P<user>[^\]]*)\] FTP command: Client "(?P<ip>\d+\.\d+\.\d+\.\d+)", "(?P<cmd>DELE|MKD|RMD|CWD|RNFR|RNTO|APPE|SITE|RETR|STOR|STOU|LIST|NLST|MLSD|MLST|SIZE|MDTM)(?: (?P<arg>[^"]+))?"')
         }
     },
     'http': {
@@ -240,6 +241,15 @@ _FTP_CMD_LABELS = {
     'RNTO': 'Rename to',
     'APPE': 'Append to file',
     'SITE': 'Site command',
+    'RETR': 'Download file',
+    'STOR': 'Upload file',
+    'STOU': 'Upload file (unique)',
+    'LIST': 'List directory',
+    'NLST': 'List directory (names)',
+    'MLSD': 'List directory (machine)',
+    'MLST': 'File info (machine)',
+    'SIZE': 'Get file size',
+    'MDTM': 'Get file mtime',
 }
 
 # Parse FTP honeypot log lines
@@ -247,7 +257,7 @@ def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['ftp']['source'])
     for line in read_new_lines(source, file_states):
-        for pattern_name in ['command', 'transfer', 'connect', 'login']:
+        for pattern_name in ['command', 'transfer', 'transfer_fail', 'connect', 'login']:
             pattern = PATTERNS['ftp']['patterns'][pattern_name]
             match = pattern.match(line)
             if match:
@@ -262,6 +272,10 @@ def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
                 elif pattern_name == 'transfer':
                     logs.append(create_entry('ftp', dt, match.group('ip'),
                                              f"{match.group('type').capitalize()} of '{match.group('file')}' ({match.group('size')} bytes)",
+                                             user=match.group('user')))
+                elif pattern_name == 'transfer_fail':
+                    logs.append(create_entry('ftp', dt, match.group('ip'),
+                                             f"Failed {match.group('type').lower()} of '{match.group('file')}'",
                                              user=match.group('user')))
                 elif pattern_name == 'connect':
                     logs.append(create_entry('ftp', dt, match.group('ip'), 'Connection established'))
