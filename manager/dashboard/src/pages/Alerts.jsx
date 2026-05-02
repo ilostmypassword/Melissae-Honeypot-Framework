@@ -50,6 +50,7 @@ function buildGroups(list) {
         ip: a.ip || null,
         severity: a.severity,
         score: a.score || 0,
+        protocol: a.protocol || null,
         ids: [],
         members: [],
         status_counts: { new: 0, acknowledged: 0, resolved: 0 },
@@ -64,6 +65,7 @@ function buildGroups(list) {
     if ((SEVERITY_ORDER[a.severity] ?? 9) < (SEVERITY_ORDER[g.severity] ?? 9)) {
       g.severity = a.severity
     }
+    if (g.protocol && a.protocol && a.protocol !== g.protocol) g.protocol = null
     if (String(a.created_at || '') < String(g.first_seen || '')) g.first_seen = a.created_at
     if (String(a.created_at || '') > String(g.last_seen || '')) g.last_seen = a.created_at
   }
@@ -93,25 +95,37 @@ function groupStatus(g) {
   return 'resolved'
 }
 
+function _toDate(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function _formatDate(d) {
+  return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: '2-digit' })
+}
+
+function _formatHMS(d) {
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
 function formatTime(iso) {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso
-    return d.toLocaleString(undefined, {
-      year: 'numeric', month: 'short', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })
-  } catch {
-    return iso
-  }
+  const d = _toDate(iso)
+  if (!d) return iso || '—'
+  return `${_formatDate(d)}, ${_formatHMS(d)}`
 }
 
 function formatRange(first, last) {
-  const f = formatTime(first)
-  const l = formatTime(last)
-  if (f === l) return l
-  return `${l}  ←  ${f}`
+  const fDate = _toDate(first)
+  const lDate = _toDate(last)
+  if (!fDate && !lDate) return '—'
+  if (!fDate) return formatTime(last)
+  if (!lDate) return formatTime(first)
+  if (fDate.getTime() === lDate.getTime()) return formatTime(last)
+  if (fDate.toDateString() === lDate.toDateString()) {
+    return `${_formatDate(lDate)}, ${_formatHMS(fDate)} → ${_formatHMS(lDate)}`
+  }
+  return `${formatTime(first)} → ${formatTime(last)}`
 }
 
 // Alerts backlog page
@@ -253,6 +267,36 @@ export default function Alerts() {
   const groupedSelectedAll = selected.size > 0 && selected.size === groups.flatMap(g => g.ids).length
   const flatSelectedAll = selected.size > 0 && selected.size === alerts.length
 
+  const navigateLogsForAlert = alert => {
+    if (!alert) return
+    if (alert.log_id) {
+      navigate(`/search?log_id=${encodeURIComponent(alert.log_id)}`)
+      return
+    }
+    // Fallback when log_id is missing: build a precise MQL query from log fields.
+    const log = alert.log || {}
+    const parts = []
+    const agentId = alert.agent_id || log.agent_id
+    if (agentId) parts.push(`agent_id:${agentId}`)
+    if (alert.ip || log.ip) parts.push(`ip:${alert.ip || log.ip}`)
+    if (alert.protocol || log.protocol) parts.push(`protocol:${alert.protocol || log.protocol}`)
+    if (log.date) parts.push(`date:${log.date}`)
+    if (log.action && !/\b(AND|OR)\b/i.test(log.action)) {
+      parts.push(`action:${log.action}`)
+    }
+    if (parts.length === 0) return
+    navigate(`/search?q=${encodeURIComponent(parts.join(' AND '))}`)
+  }
+
+  const navigateLogsForGroup = group => {
+    if (!group) return
+    const parts = []
+    if (group.ip) parts.push(`ip:${group.ip}`)
+    if (group.protocol) parts.push(`protocol:${group.protocol}`)
+    if (parts.length === 0) return
+    navigate(`/search?q=${encodeURIComponent(parts.join(' AND '))}`)
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -379,6 +423,8 @@ export default function Alerts() {
                         onToggleSelect={() => toggleSelectedMany(g.ids)}
                         onToggleMember={toggleSelected}
                         onNavigateIp={ip => navigate(`/search?q=${encodeURIComponent(`ip:${ip}`)}`)}
+                        onNavigateGroupLogs={navigateLogsForGroup}
+                        onNavigateAlertLogs={navigateLogsForAlert}
                         onAck={() => bulkSet(g.members.filter(m => m.status === 'new').map(m => m._id), 'acknowledged')}
                         onResolve={() => bulkSet(g.members.filter(m => m.status !== 'resolved').map(m => m._id), 'resolved')}
                         onReopen={() => bulkSet(g.members.filter(m => m.status !== 'new').map(m => m._id), 'new')}
@@ -394,6 +440,7 @@ export default function Alerts() {
                         busy={busy}
                         onToggle={() => toggleSelected(a._id)}
                         onNavigateIp={ip => navigate(`/search?q=${encodeURIComponent(`ip:${ip}`)}`)}
+                        onNavigateLogs={navigateLogsForAlert}
                         onStatus={setStatus}
                       />
                     ))}
@@ -432,6 +479,7 @@ function FilterPills({ label, options, value, onChange }) {
 function GroupRows({
   group, status, expanded, allSelected, busy,
   onToggleExpand, onToggleSelect, onToggleMember, onNavigateIp,
+  onNavigateGroupLogs, onNavigateAlertLogs,
   onAck, onResolve, onReopen, memberSelected, onMemberStatus,
 }) {
   const activeCount = (group.status_counts.new || 0) + (group.status_counts.acknowledged || 0)
@@ -493,6 +541,15 @@ function GroupRows({
         <td className="px-3 py-2.5"><AlertStatusTag status={status} /></td>
         <td className="px-3 py-2.5 text-right">
           <div className="flex justify-end gap-1.5">
+            {group.ip && (
+              <button
+                onClick={() => onNavigateGroupLogs(group)}
+                className="px-2 py-1 text-[10px] font-semibold rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
+                title="Show logs for this group"
+              >
+                LOGS
+              </button>
+            )}
             {(group.status_counts.new || 0) > 0 && (
               <button
                 disabled={busy}
@@ -551,6 +608,13 @@ function GroupRows({
           <td className="px-3 py-2"><AlertStatusTag status={m.status} /></td>
           <td className="px-3 py-2 text-right">
             <div className="flex justify-end gap-1.5">
+              {m.ip && (
+                <button
+                  onClick={() => onNavigateAlertLogs(m)}
+                  className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
+                  title="Show the log that triggered this alert"
+                >LOG</button>
+              )}
               {m.status === 'new' && (
                 <button
                   disabled={busy}
@@ -580,7 +644,7 @@ function GroupRows({
   )
 }
 
-function FlatRow({ alert: a, selected, busy, onToggle, onNavigateIp, onStatus }) {
+function FlatRow({ alert: a, selected, busy, onToggle, onNavigateIp, onNavigateLogs, onStatus }) {
   return (
     <tr className="border-b border-border/40 hover:bg-surface-hover/20 transition-colors">
       <td className="px-3 py-2.5">
@@ -622,6 +686,13 @@ function FlatRow({ alert: a, selected, busy, onToggle, onNavigateIp, onStatus })
       <td className="px-3 py-2.5"><AlertStatusTag status={a.status} /></td>
       <td className="px-3 py-2.5 text-right">
         <div className="flex justify-end gap-1.5">
+          {a.ip && (
+            <button
+              onClick={() => onNavigateLogs(a)}
+              className="px-2 py-1 text-[10px] font-semibold rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
+              title="Show the log that triggered this alert"
+            >LOG</button>
+          )}
           {a.status !== 'acknowledged' && a.status !== 'resolved' && (
             <button
               disabled={busy}

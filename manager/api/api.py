@@ -55,6 +55,12 @@ def api_logs():
         agent_id = request.args.get("agent_id")
         if agent_id:
             query["agent_id"] = _sanitize_str(agent_id, 64)
+        log_id = request.args.get("log_id")
+        if log_id:
+            cleaned = _sanitize_str(log_id, 128)
+            if not re.fullmatch(r"[A-Fa-f0-9]+", cleaned):
+                return jsonify({"error": "Invalid log_id"}), 400
+            query["_id"] = cleaned
         try:
             limit = max(1, min(int(request.args.get("limit", MAX_RESULTS_LOGS)), MAX_RESULTS_LOGS))
             skip = max(0, int(request.args.get("skip", 0)))
