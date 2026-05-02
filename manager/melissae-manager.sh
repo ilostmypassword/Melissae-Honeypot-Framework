@@ -91,6 +91,9 @@ get_prompt() {
 
 # Initialize the ECDSA P-384 Certificate Authority
 _init_ca() {
+    local ca_cn="$1"
+    local ca_org="${2:-}"
+
     if [ -f "$PKI_DIR/ca.key" ] && [ -f "$PKI_DIR/ca.crt" ]; then
         info "CA already initialized at $PKI_DIR"
         return 0
@@ -102,11 +105,14 @@ _init_ca() {
     openssl ecparam -genkey -name secp384r1 -out "$PKI_DIR/ca.key" 2>/dev/null
     chmod 600 "$PKI_DIR/ca.key"
 
+    local ca_subj="/CN=${ca_cn}"
+    [ -n "$ca_org" ] && ca_subj="${ca_subj}/O=${ca_org}"
+
     openssl req -new -x509 -sha384 \
         -key "$PKI_DIR/ca.key" \
         -out "$PKI_DIR/ca.crt" \
         -days 3650 \
-        -subj "/CN=Melissae CA/O=Melissae Honeypot Framework" \
+        -subj "$ca_subj" \
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
         2>/dev/null
@@ -145,9 +151,12 @@ SSLEOF
 }
 
 # Generate a signed certificate with SAN (domain or IP)
+
 _gen_cert() {
     local name="$1"
     local cert_type="${2:-dual}"  # server, client, dual
+    local cert_cn="${_CERT_CN:-$name}"
+    unset _CERT_CN
     shift 2
     local sans=("$@")
 
@@ -183,7 +192,7 @@ req_extensions = v3_req
 prompt = no
 
 [req_distinguished_name]
-CN = $name
+CN = $cert_cn
 
 [v3_req]
 basicConstraints = CA:FALSE
@@ -883,12 +892,35 @@ cmd_install() {
         success "Docker installed"
     fi
 
-    _init_ca
-
     local manager_ip
     manager_ip=$(hostname -I | awk '{print $1}')
     local manager_hostname
     manager_hostname=$(hostname -f 2>/dev/null || hostname)
+
+    echo
+    info "Certificate Authority configuration"
+    info "This identity appears in every TLS certificate. Use a neutral name to avoid revealing this as a honeypot."
+    local default_ca_cn="${manager_hostname} CA"
+    local ca_cn ca_org
+    while true; do
+        read -r -p "CA Common Name [${default_ca_cn}]: " ca_cn
+        ca_cn="${ca_cn:-$default_ca_cn}"
+        if [[ "$ca_cn" == *"/"* ]]; then
+            warn "CA Common Name must not contain '/'"
+            continue
+        fi
+        break
+    done
+    while true; do
+        read -r -p "CA Organization (optional, leave blank to omit): " ca_org
+        if [[ "$ca_org" == *"/"* ]]; then
+            warn "CA Organization must not contain '/'"
+            continue
+        fi
+        break
+    done
+
+    _init_ca "$ca_cn" "$ca_org"
 
     echo
     info "Manager certificate configuration"
@@ -905,7 +937,7 @@ cmd_install() {
     san_args+=("$manager_ip" "localhost" "127.0.0.1")
 
     info "Generating manager certificate (SANs: ${san_args[*]})..."
-    _gen_cert "manager" "dual" "${san_args[@]}"
+    _CERT_CN="$manager_fqdn" _gen_cert "manager" "dual" "${san_args[@]}"
 
     echo
     info "Configure dashboard authentication"
