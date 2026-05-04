@@ -1,15 +1,21 @@
 id: MLS005
 name: HTTP request burst (Web Scanning)
 description: >
-  Burst of HTTP requests from the same source (>=5 in 1 minute).
-  Typical of automated scanners or fuzzers.
+  Burst of dynamic HTTP requests from the same source within 5 minutes
+  (>=10). Static-asset hits (CSS, JS, images, fonts, source maps) are
+  filtered out so a normal page load with many sub-resources does not
+  trip the rule; only repeated probing of dynamic endpoints triggers.
 severity: low
 enabled: true
 schedule: "*/1 * * * *"
-lookback: 1m
-mql: 'protocol:http'
+lookback: 5m
+mql: >
+  protocol:http
+  AND NOT path:.css AND NOT path:.js AND NOT path:.png AND NOT path:.jpg
+  AND NOT path:.jpeg AND NOT path:.gif AND NOT path:.ico AND NOT path:.svg
+  AND NOT path:.woff AND NOT path:.woff2 AND NOT path:.ttf AND NOT path:.map
 group_by: ip
-threshold: 5
+threshold: 10
 score: 10
 tags: [recon, scan]
 mitre: [T1595]
