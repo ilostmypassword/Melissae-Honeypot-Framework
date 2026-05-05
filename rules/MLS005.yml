@@ -7,15 +7,15 @@ description: >
   trip the rule; only repeated probing of dynamic endpoints triggers.
 severity: low
 enabled: true
-schedule: "*/1 * * * *"
-lookback: 5m
+schedule: "*/3 * * * *"
+lookback: 3m
 mql: >
   protocol:http
   AND NOT path:.css AND NOT path:.js AND NOT path:.png AND NOT path:.jpg
   AND NOT path:.jpeg AND NOT path:.gif AND NOT path:.ico AND NOT path:.svg
   AND NOT path:.woff AND NOT path:.woff2 AND NOT path:.ttf AND NOT path:.map
 group_by: ip
-threshold: 10
+threshold: 15
 score: 10
 tags: [recon, scan]
 mitre: [T1595]

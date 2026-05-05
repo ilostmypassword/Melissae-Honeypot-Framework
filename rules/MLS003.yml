@@ -7,7 +7,7 @@ severity: critical
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 1m
-mql: 'protocol:ftp AND (action:PUT OR action:GET OR action:DELETE OR action:RMDIR)'
+mql: 'protocol:ftp AND (action:LIST OR action:PUT OR action:GET OR action:DELETE OR action:RMDIR)'
 group_by: ip
 threshold: 1
 score: 70

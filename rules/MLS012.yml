@@ -1,0 +1,14 @@
+id: MLS012
+name: Nmap scan
+description: >
+  Nmap scan detected based on user-agent string
+severity: low
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 1m
+mql: 'protocol:http AND nmap'
+group_by: ip
+threshold: 1
+score: 5
+tags: [recon, scan]
+mitre: [T1595]
