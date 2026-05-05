@@ -12,7 +12,7 @@ mql: >
   protocol:ssh AND
   (action:wget OR action:curl OR action:chmod OR action:/etc/passwd
    OR action:/etc/shadow OR action:base64 OR action:nmap OR action:useradd
-   OR action:ssh-keygen OR action:crontab)
+   OR action:ssh-keygen OR action:crontab OR action:whoami OR action:id)
 group_by: ip
 threshold: 1
 score: 70

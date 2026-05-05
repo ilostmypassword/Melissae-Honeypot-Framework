@@ -5,8 +5,8 @@ description: >
   framework consoles (/wp-admin, /.git, /.env, /actuator, /phpmyadmin).
 severity: medium
 enabled: true
-schedule: "*/1 * * * *"
-lookback: 1m
+schedule: "*/3 * * * *"
+lookback: 3m
 mql: >
   protocol:http AND
   (path:/wp-admin OR path:/wp-login OR path:/phpmyadmin OR path:/.git
@@ -14,7 +14,7 @@ mql: >
    OR path:/xmlrpc OR path:/console OR path:/manager OR path:/actuator
    OR path:/.aws OR path:/.ssh OR path:/passwd OR path:/backup)
 group_by: ip
-threshold: 1
+threshold: 3
 score: 15
 tags: [recon, web-scanner]
 mitre: [T1595, T1190]
