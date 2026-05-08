@@ -31,9 +31,6 @@ export default function ThreatDetailModal({ threat, onClose }) {
   const score = Number.isFinite(threat['protocol-score'])
     ? `${threat['protocol-score']}/100`
     : 'N/A'
-  const confidence = Number.isFinite(threat.confidence)
-    ? `${Math.round(threat.confidence * 100)}%`
-    : 'N/A'
   const reasons = Array.isArray(threat.reasons) ? threat.reasons : []
   const location = formatLocation(geo)
   const isPublicIP = geo && geo.public !== false
@@ -73,7 +70,6 @@ export default function ThreatDetailModal({ threat, onClose }) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
             { label: 'Score', value: score },
-            { label: 'Confidence', value: confidence },
             { label: 'First seen', value: threat.first_seen || 'N/A' },
             { label: 'Last seen', value: threat.last_seen || 'N/A' },
           ].map(m => (

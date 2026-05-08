@@ -15,17 +15,10 @@ function getSeverityScore(t) {
   return rank[t.verdict?.toLowerCase()] || 0
 }
 
-function getConfidence(t) {
-  const c = Number(t?.confidence)
-  return Number.isFinite(c) ? c : 0
-}
-
 function sortThreats(list) {
   return [...list].sort((a, b) => {
     const diff = getSeverityScore(b) - getSeverityScore(a)
     if (diff !== 0) return diff
-    const conf = getConfidence(b) - getConfidence(a)
-    if (conf !== 0) return conf
     return String(a.ip).localeCompare(String(b.ip))
   })
 }
@@ -73,7 +66,6 @@ export default function ThreatIntel() {
     { key: 'ip', label: 'IP Address' },
     { key: 'verdict', label: 'Verdict' },
     { key: 'score', label: 'Score' },
-    { key: 'confidence', label: 'Confidence' },
     { key: 'details', label: 'Details' },
     { key: 'actions', label: 'Actions' },
   ]
@@ -96,14 +88,6 @@ export default function ThreatIntel() {
         return (
           <code className="text-sm font-mono text-text-secondary">
             {Number.isFinite(row['protocol-score']) ? `${row['protocol-score']}/100` : 'N/A'}
-          </code>
-        )
-      case 'confidence':
-        return (
-          <code className="text-sm font-mono text-text-secondary">
-            {Number.isFinite(row.confidence)
-              ? `${Math.round(row.confidence * 100)}%`
-              : 'N/A'}
           </code>
         )
       case 'details':

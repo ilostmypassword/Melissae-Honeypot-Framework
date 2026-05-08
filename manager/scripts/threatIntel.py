@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import math
 import os
 import time
 import urllib.request
@@ -21,8 +20,6 @@ DB_NAME = os.getenv("MONGO_DB", "melissae")
 VERDICT_MALICIOUS = 70
 VERDICT_SUSPICIOUS = 30
 ALERTS_LOOKBACK_DAYS = 90
-
-SEVERITY_BOOST = {"low": 0.0, "medium": 0.1, "high": 0.2, "critical": 0.3}
 
 
 def _parse_iso(value: Optional[str]) -> Optional[datetime]:
@@ -169,30 +166,6 @@ def _aggregate_alerts_by_ip(db) -> Dict[str, Dict]:
     return by_ip
 
 
-def _compute_confidence(bucket: Dict) -> float:
-    rules = bucket["rules"]
-    n_rules = len(rules)
-    n_alerts = bucket["alert_count"]
-
-    c_rules = min(1.0, n_rules / 4)
-    c_volume = min(1.0, math.log2(max(1, n_alerts)) / 7)
-    c_severity = max((SEVERITY_BOOST.get(r["severity"], 0.0) for r in rules.values()),
-                     default=0.0)
-    c_severity = min(1.0, c_severity * 3)
-    c_time = 0.3
-    if bucket["first_seen"] and bucket["last_seen"]:
-        hours = (bucket["last_seen"] - bucket["first_seen"]).total_seconds() / 3600
-        c_time = min(1.0, 0.3 + 0.7 * min(hours, 24) / 24)
-
-    confidence = (
-        0.35 * c_rules
-        + 0.20 * c_volume
-        + 0.30 * c_severity
-        + 0.15 * c_time
-    )
-    return max(0.10, min(1.0, confidence))
-
-
 def _compute_threat(ip: str, bucket: Dict) -> Dict:
     # Each alert contributes its rule score (capped at 100 overall).
     score = min(100, sum(r["score"] * r["count"] for r in bucket["rules"].values()))
@@ -208,14 +181,11 @@ def _compute_threat(ip: str, bucket: Dict) -> Dict:
                          key=lambda kv: (-kv[1]["score"], kv[0])):
         reasons.append(f"{r['name']} ({r['count']}× — +{r['score']})")
 
-    confidence = _compute_confidence(bucket)
-
     doc = {
         "type": "ip",
         "ip": ip,
         "protocol-score": score,
         "verdict": verdict,
-        "confidence": round(confidence, 2),
         "reasons": reasons,
         "rules": [
             {"id": rid, "name": r["name"], "severity": r["severity"],
