@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const PROTOCOL_COLOR = {
   ssh:    '#38bdf8',
@@ -9,7 +9,25 @@ const PROTOCOL_COLOR = {
   telnet: '#fda4af',
 }
 
-// Map a module/container name to the protocol field used in logs.
+// SVG world dimensions — the viewBox the user pans/zooms inside.
+const CANVAS_W = 1600
+const CANVAS_H = 720
+
+// Node shapes (SVG units).
+const NODE = {
+  manager: { w: 180, h: 44, rx: 10 },
+  agent:   { w: 180, h: 38, rx: 8 },
+  module:  { w: 150, h: 30, rx: 6 },
+}
+
+const ZOOM_MIN = 0.35
+const ZOOM_MAX = 2.5
+const ZOOM_STEP = 1.18
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function moduleProtocol(name) {
   const n = String(name || '').toLowerCase()
   if (n.includes('ssh'))    return 'ssh'
@@ -21,109 +39,251 @@ function moduleProtocol(name) {
   return n
 }
 
+function moduleNodeId(agentId, name) {
+  return `mod:${agentId}:${moduleProtocol(name)}`
+}
+
 function logSig(l) {
   return `${l.agent_id || ''}|${l.protocol || ''}|${l.timestamp || ''}|${l.date || ''}|${l.hour || ''}|${l.ip || ''}|${l.action || ''}|${l.path || ''}`
 }
 
-// Live attack topology: a real schematic with the Manager at the top,
-// connected by curves to each Agent, and each Agent connected to its modules.
-// Every incoming log triggers a discrete red flash on the targeted module
-// (Web Animations API — multiple logs cause repeated flashes that overlap).
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v))
+}
+
+function truncate(str, n) {
+  const s = String(str || '')
+  return s.length > n ? s.slice(0, n - 1) + '…' : s
+}
+
+function buildDefaultLayout(agents) {
+  const pos = {}
+  pos['manager'] = { x: CANVAS_W / 2, y: 70 }
+  const n = Math.max(1, agents.length)
+  const agentY = 230
+  const moduleStartY = 350
+  const moduleStepY = 44
+  agents.forEach((a, i) => {
+    const x = (CANVAS_W * (i + 1)) / (n + 1)
+    pos[`agent:${a.agent_id}`] = { x, y: agentY }
+    const mods = a.last_health?.modules || []
+    mods.forEach((m, j) => {
+      pos[moduleNodeId(a.agent_id, m.name)] = { x, y: moduleStartY + j * moduleStepY }
+    })
+  })
+  return pos
+}
+
+// Vertical-leaning Bezier curve.
+function curvePath(p1, p2) {
+  const dy = (p2.y - p1.y) / 2
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function AgentTopology({ agents = [], logs = [], onModuleClick }) {
-  const containerRef = useRef(null)
-  const managerRef = useRef(null)
-  const agentRefs = useRef(new Map())   // agent_id -> DOM element
-  const moduleRefs = useRef(new Map())  // 'agent_id:protocol' -> DOM element
-
-  const [paths, setPaths] = useState({ manager: [], modules: [] })
-  const [packets, setPackets] = useState([]) // [{ id, d, color }]
-  const pathsRef = useRef(paths)
-  const seenRef = useRef(null)
-  const timersRef = useRef(new Set())
-  const packetIdRef = useRef(0)
-
-  useEffect(() => { pathsRef.current = paths }, [paths])
+  const svgRef = useRef(null)
 
   const visibleAgents = useMemo(
     () => agents.filter(a => a.status !== 'enrolled' && a.status !== 'pending'),
     [agents]
   )
 
-  // Recompute connection paths from current DOM positions
+  // ---- Node positions (kept across re-renders / agent updates) -----------
+  const [positions, setPositions] = useState(() => buildDefaultLayout(visibleAgents))
+
   useEffect(() => {
-    const compute = () => {
-      const container = containerRef.current
-      const manager = managerRef.current
-      if (!container || !manager) return
-      const cRect = container.getBoundingClientRect()
-      const point = (el, edge) => {
-        const r = el.getBoundingClientRect()
-        const x = r.left - cRect.left + r.width / 2
-        const y = (edge === 'top' ? r.top : r.bottom) - cRect.top
-        return { x, y }
+    setPositions(prev => {
+      const desired = buildDefaultLayout(visibleAgents)
+      const next = {}
+      for (const id of Object.keys(desired)) {
+        next[id] = prev[id] || desired[id]
       }
-
-      const mPt = point(manager, 'bottom')
-      const managerPaths = []
-      const modulePaths = []
-
-      visibleAgents.forEach(a => {
-        const aEl = agentRefs.current.get(a.agent_id)
-        if (!aEl) return
-        const aTop = point(aEl, 'top')
-        const aBot = point(aEl, 'bottom')
-        const dy = (aTop.y - mPt.y) / 2
-        managerPaths.push({
-          id: `m-${a.agent_id}`,
-          d: `M ${mPt.x} ${mPt.y} C ${mPt.x} ${mPt.y + dy}, ${aTop.x} ${aTop.y - dy}, ${aTop.x} ${aTop.y}`,
-        })
-
-        const modules = a.last_health?.modules || []
-        modules.forEach(m => {
-          const proto = moduleProtocol(m.name)
-          const key = `${a.agent_id}:${proto}`
-          const mEl = moduleRefs.current.get(key)
-          if (!mEl) return
-          const moduleLeft = (() => {
-            const r = mEl.getBoundingClientRect()
-            return { x: r.left - cRect.left, y: r.top - cRect.top + r.height / 2 }
-          })()
-          // Bezier from agent bottom-center to module left-center
-          const cx1 = aBot.x
-          const cy1 = (aBot.y + moduleLeft.y) / 2
-          const cx2 = moduleLeft.x - 20
-          const cy2 = moduleLeft.y
-          modulePaths.push({
-            id: `mod-${key}`,
-            key,
-            color: PROTOCOL_COLOR[proto] || '#30363d',
-            d: `M ${aBot.x} ${aBot.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${moduleLeft.x} ${moduleLeft.y}`,
-          })
-        })
-      })
-
-      setPaths({ manager: managerPaths, modules: modulePaths })
-    }
-
-    compute()
-    const ro = new ResizeObserver(compute)
-    if (containerRef.current) ro.observe(containerRef.current)
-    window.addEventListener('resize', compute)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', compute)
-    }
+      return next
+    })
   }, [visibleAgents])
 
-  // Detect new logs and fire one flash per log, replayed over a short window
+  // ---- View transform (pan / zoom) --------------------------------------
+  const [view, setView] = useState({ tx: 0, ty: 0, s: 1 })
+
+  // ---- Interaction state ------------------------------------------------
+  const dragRef = useRef(null)
+  const [draggingId, setDraggingId] = useState(null)
+  const [hoveringId, setHoveringId] = useState(null)
+  const [isPanning, setIsPanning] = useState(false)
+
+  const screenToSvg = useCallback((clientX, clientY) => {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const r = svg.getBoundingClientRect()
+    return {
+      x: ((clientX - r.left) / r.width) * CANVAS_W,
+      y: ((clientY - r.top) / r.height) * CANVAS_H,
+    }
+  }, [])
+
+  const svgToWorld = useCallback((sx, sy) => ({
+    x: (sx - view.tx) / view.s,
+    y: (sy - view.ty) / view.s,
+  }), [view])
+
+  // ---- Pointer handlers -------------------------------------------------
+  const onPointerDownNode = (e, id) => {
+    e.stopPropagation()
+    if (e.button !== undefined && e.button !== 0) return
+    const svgPt = screenToSvg(e.clientX, e.clientY)
+    const world = svgToWorld(svgPt.x, svgPt.y)
+    const cur = positions[id]
+    if (!cur) return
+    dragRef.current = {
+      kind: 'node',
+      id,
+      moved: false,
+      offX: world.x - cur.x,
+      offY: world.y - cur.y,
+    }
+    setDraggingId(id)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+
+  const onPointerDownBackground = e => {
+    if (e.button !== undefined && e.button !== 0) return
+    dragRef.current = {
+      kind: 'pan',
+      startX: e.clientX,
+      startY: e.clientY,
+      origTx: view.tx,
+      origTy: view.ty,
+    }
+    setIsPanning(true)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+
+  const onPointerMove = e => {
+    const drag = dragRef.current
+    if (!drag) return
+
+    if (drag.kind === 'node') {
+      const svgPt = screenToSvg(e.clientX, e.clientY)
+      const world = svgToWorld(svgPt.x, svgPt.y)
+      drag.moved = true
+      setPositions(prev => ({
+        ...prev,
+        [drag.id]: {
+          x: clamp(world.x - drag.offX, 0, CANVAS_W),
+          y: clamp(world.y - drag.offY, 0, CANVAS_H),
+        },
+      }))
+    } else if (drag.kind === 'pan') {
+      const svg = svgRef.current
+      if (!svg) return
+      const r = svg.getBoundingClientRect()
+      const dx = ((e.clientX - drag.startX) / r.width) * CANVAS_W
+      const dy = ((e.clientY - drag.startY) / r.height) * CANVAS_H
+      setView(v => ({ ...v, tx: drag.origTx + dx, ty: drag.origTy + dy }))
+    }
+  }
+
+  const onPointerUp = e => {
+    const drag = dragRef.current
+    dragRef.current = null
+    setDraggingId(null)
+    setIsPanning(false)
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+
+    // Click (no drag) on a module node → invoke parent callback.
+    if (drag && drag.kind === 'node' && !drag.moved) {
+      const id = drag.id
+      if (id.startsWith('mod:')) {
+        const [, agentId, proto] = id.split(':')
+        if (onModuleClick) onModuleClick(proto, agentId)
+      }
+    }
+  }
+
+  const onWheel = e => {
+    e.preventDefault()
+    const svgPt = screenToSvg(e.clientX, e.clientY)
+    setView(v => {
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
+      const newS = clamp(v.s * factor, ZOOM_MIN, ZOOM_MAX)
+      const wx = (svgPt.x - v.tx) / v.s
+      const wy = (svgPt.y - v.ty) / v.s
+      return { s: newS, tx: svgPt.x - wx * newS, ty: svgPt.y - wy * newS }
+    })
+  }
+
+  // ---- Toolbar actions --------------------------------------------------
+  const zoomBy = useCallback(factor => {
+    setView(v => {
+      const newS = clamp(v.s * factor, ZOOM_MIN, ZOOM_MAX)
+      const cx = CANVAS_W / 2
+      const cy = CANVAS_H / 2
+      const wx = (cx - v.tx) / v.s
+      const wy = (cy - v.ty) / v.s
+      return { s: newS, tx: cx - wx * newS, ty: cy - wy * newS }
+    })
+  }, [])
+
+  const resetView = useCallback(() => {
+    setView({ tx: 0, ty: 0, s: 1 })
+  }, [])
+
+  const resetLayout = useCallback(() => {
+    setPositions(buildDefaultLayout(visibleAgents))
+    setView({ tx: 0, ty: 0, s: 1 })
+  }, [visibleAgents])
+
+  // ---- Connections -------------------------------------------------------
+  const connections = useMemo(() => {
+    const lines = { manager: [], modules: [] }
+    const mPos = positions['manager']
+    if (!mPos) return lines
+    const mBottom = { x: mPos.x, y: mPos.y + NODE.manager.h / 2 }
+
+    visibleAgents.forEach(a => {
+      const aPos = positions[`agent:${a.agent_id}`]
+      if (!aPos) return
+      const aTop = { x: aPos.x, y: aPos.y - NODE.agent.h / 2 }
+      const aBot = { x: aPos.x, y: aPos.y + NODE.agent.h / 2 }
+      lines.manager.push({ id: `link-m-${a.agent_id}`, d: curvePath(mBottom, aTop) })
+
+      const modules = a.last_health?.modules || []
+      modules.forEach(m => {
+        const proto = moduleProtocol(m.name)
+        const id = moduleNodeId(a.agent_id, m.name)
+        const modPos = positions[id]
+        if (!modPos) return
+        const modTop = { x: modPos.x, y: modPos.y - NODE.module.h / 2 }
+        lines.modules.push({
+          id: `link-${id}`,
+          key: `${a.agent_id}:${proto}`,
+          color: PROTOCOL_COLOR[proto] || '#30363d',
+          d: curvePath(aBot, modTop),
+        })
+      })
+    })
+    return lines
+  }, [visibleAgents, positions])
+
+  // ---- Live attack effects (flashes + packets) --------------------------
+  const seenRef = useRef(null)
+  const timersRef = useRef(new Set())
+  const idCounterRef = useRef(0)
+  const [flashes, setFlashes] = useState([])
+  const [packets, setPackets] = useState([])
+  const connectionsRef = useRef(connections)
+  useEffect(() => { connectionsRef.current = connections }, [connections])
+
   useEffect(() => {
     const sigs = new Set(logs.map(logSig))
-
     if (seenRef.current === null) {
       seenRef.current = sigs
       return
     }
-
     const newLogs = logs.filter(l => !seenRef.current.has(logSig(l)))
     seenRef.current = sigs
     if (newLogs.length === 0) return
@@ -135,50 +295,46 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     newLogs.forEach((log, i) => {
       const t = setTimeout(() => {
         timersRef.current.delete(t)
-        flashLog(log)
+        triggerFlash(log)
       }, i * step)
       timersRef.current.add(t)
     })
   }, [logs])
 
-  // Cleanup on unmount
   useEffect(() => () => {
     timersRef.current.forEach(clearTimeout)
     timersRef.current.clear()
   }, [])
 
-  function flashLog(log) {
+  function triggerFlash(log) {
     const proto = String(log.protocol || '').toLowerCase()
-    const key = `${log.agent_id}:${proto}`
-    const el = moduleRefs.current.get(key)
-    if (el && el.animate) {
-      el.animate(
-        [
-          { boxShadow: '0 0 0 0 rgba(248, 113, 113, 0)',          backgroundColor: 'rgba(22, 27, 34, 1)',         borderColor: 'rgba(48, 54, 61, 1)',          transform: 'scale(1)' },
-          { boxShadow: '0 0 16px 4px rgba(248, 113, 113, 0.95)',  backgroundColor: 'rgba(248, 113, 113, 0.75)',   borderColor: 'rgba(252, 165, 165, 1)',       transform: 'scale(1.12)', offset: 0.18 },
-          { boxShadow: '0 0 8px 2px rgba(248, 113, 113, 0.45)',   backgroundColor: 'rgba(248, 113, 113, 0.30)',   borderColor: 'rgba(248, 113, 113, 0.65)',    transform: 'scale(1.04)', offset: 0.55 },
-          { boxShadow: '0 0 0 0 rgba(248, 113, 113, 0)',          backgroundColor: 'rgba(22, 27, 34, 1)',         borderColor: 'rgba(48, 54, 61, 1)',          transform: 'scale(1)' },
-        ],
-        { duration: 1800, easing: 'ease-out', composite: 'replace' }
-      )
-    }
+    const nodeId = `mod:${log.agent_id}:${proto}`
+    const fid = ++idCounterRef.current
+    setFlashes(prev => [...prev, { id: fid, nodeId }])
+    const t1 = setTimeout(() => {
+      timersRef.current.delete(t1)
+      setFlashes(prev => prev.filter(f => f.id !== fid))
+    }, 1500)
+    timersRef.current.add(t1)
 
-    // Animate a packet along the agent→module connection
-    const path = pathsRef.current.modules.find(p => p.key === key)
-    if (path) {
-      const id = ++packetIdRef.current
-      setPackets(prev => [...prev, { id, d: path.d, color: path.color }])
-      const t = setTimeout(() => {
-        timersRef.current.delete(t)
-        setPackets(prev => prev.filter(p => p.id !== id))
-      }, 900)
-      timersRef.current.add(t)
+    const link = connectionsRef.current.modules.find(p => p.key === `${log.agent_id}:${proto}`)
+    if (link) {
+      const pid = ++idCounterRef.current
+      setPackets(prev => [...prev, { id: pid, d: link.d, color: link.color }])
+      const t2 = setTimeout(() => {
+        timersRef.current.delete(t2)
+        setPackets(prev => prev.filter(p => p.id !== pid))
+      }, 950)
+      timersRef.current.add(t2)
     }
   }
 
+  // ---- Render ------------------------------------------------------------
+  const cursor = isPanning ? 'grabbing' : draggingId ? 'grabbing' : 'grab'
+
   return (
     <div className="glass-card p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="section-title flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
@@ -186,9 +342,15 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
           </span>
           Live Attack Map
         </h3>
-        <span className="text-[10px] font-mono text-text-muted">
-          {visibleAgents.length} agent{visibleAgents.length !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-text-muted mr-1">
+            {visibleAgents.length} agent{visibleAgents.length !== 1 ? 's' : ''} · {Math.round(view.s * 100)}%
+          </span>
+          <ToolbarBtn label="−" title="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)} />
+          <ToolbarBtn label="+" title="Zoom in" onClick={() => zoomBy(ZOOM_STEP)} />
+          <ToolbarBtn label="Fit" title="Reset view" onClick={resetView} />
+          <ToolbarBtn label="Auto" title="Re-arrange nodes" onClick={resetLayout} />
+        </div>
       </div>
 
       {visibleAgents.length === 0 ? (
@@ -196,132 +358,266 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
           No active agents to display
         </div>
       ) : (
-        <div ref={containerRef} className="relative">
-          {/* SVG connection layer */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-            {paths.manager.map(p => (
-              <path key={p.id} d={p.d} stroke="#30363d" strokeWidth="1.2" fill="none" />
-            ))}
-            {paths.modules.map(p => (
-              <path key={p.id} d={p.d} stroke="#30363d" strokeWidth="1" fill="none" strokeDasharray="3 3" opacity="0.7" />
-            ))}
-            {packets.map(pk => (
-              <circle key={pk.id} r="3.5" fill="#f87171" stroke="#fca5a5" strokeWidth="1">
-                <animateMotion dur="0.85s" repeatCount="1" fill="freeze" path={pk.d} />
-                <animate attributeName="opacity" from="1" to="0" dur="0.85s" fill="freeze" />
-              </circle>
-            ))}
+        <div className="relative rounded-lg overflow-hidden border border-border bg-surface-tertiary/40">
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="w-full select-none"
+            style={{ height: 520, cursor, touchAction: 'none' }}
+            onPointerDown={onPointerDownBackground}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onWheel={onWheel}
+          >
+            <defs>
+              <pattern id="topo-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1f2630" strokeWidth="1" />
+              </pattern>
+            </defs>
+            <rect width={CANVAS_W} height={CANVAS_H} fill="#0d1117" />
+            <rect width={CANVAS_W} height={CANVAS_H} fill="url(#topo-grid)" opacity="0.4" />
+
+            <g transform={`translate(${view.tx} ${view.ty}) scale(${view.s})`}>
+              {/* Connections */}
+              {connections.manager.map(p => (
+                <path key={p.id} d={p.d} stroke="#30363d" strokeWidth="1.4" fill="none" />
+              ))}
+              {connections.modules.map(p => (
+                <path
+                  key={p.id}
+                  d={p.d}
+                  stroke={p.color}
+                  strokeOpacity="0.55"
+                  strokeWidth="1.2"
+                  fill="none"
+                  strokeDasharray="4 4"
+                />
+              ))}
+
+              {/* Packets */}
+              {packets.map(pk => (
+                <g key={pk.id}>
+                  <circle r="5" fill={pk.color} fillOpacity="0.25">
+                    <animateMotion dur="0.9s" repeatCount="1" fill="freeze" path={pk.d} />
+                  </circle>
+                  <circle r="3" fill={pk.color}>
+                    <animateMotion dur="0.9s" repeatCount="1" fill="freeze" path={pk.d} />
+                    <animate attributeName="opacity" from="1" to="0.1" dur="0.9s" fill="freeze" />
+                  </circle>
+                </g>
+              ))}
+
+              {/* Manager node */}
+              {positions['manager'] && (
+                <ManagerNode
+                  pos={positions['manager']}
+                  hovered={hoveringId === 'manager'}
+                  dragging={draggingId === 'manager'}
+                  onPointerDown={e => onPointerDownNode(e, 'manager')}
+                  onMouseEnter={() => setHoveringId('manager')}
+                  onMouseLeave={() => setHoveringId(null)}
+                />
+              )}
+
+              {/* Agents + their modules */}
+              {visibleAgents.map(a => {
+                const aId = `agent:${a.agent_id}`
+                const aPos = positions[aId]
+                if (!aPos) return null
+                const modules = a.last_health?.modules || []
+                return (
+                  <g key={a.agent_id}>
+                    <AgentNode
+                      agent={a}
+                      pos={aPos}
+                      hovered={hoveringId === aId}
+                      dragging={draggingId === aId}
+                      onPointerDown={e => onPointerDownNode(e, aId)}
+                      onMouseEnter={() => setHoveringId(aId)}
+                      onMouseLeave={() => setHoveringId(null)}
+                    />
+                    {modules.map(m => {
+                      const mId = moduleNodeId(a.agent_id, m.name)
+                      const mPos = positions[mId]
+                      if (!mPos) return null
+                      const flashing = flashes.some(f => f.nodeId === mId)
+                      return (
+                        <ModuleNode
+                          key={mId}
+                          module={m}
+                          pos={mPos}
+                          unreachable={a.status === 'unreachable'}
+                          hovered={hoveringId === mId}
+                          dragging={draggingId === mId}
+                          flashing={flashing}
+                          onPointerDown={e => onPointerDownNode(e, mId)}
+                          onMouseEnter={() => setHoveringId(mId)}
+                          onMouseLeave={() => setHoveringId(null)}
+                        />
+                      )
+                    })}
+                  </g>
+                )
+              })}
+            </g>
           </svg>
 
-          {/* Manager node */}
-          <div className="flex justify-center mb-12 relative" style={{ zIndex: 1 }}>
-            <div
-              ref={managerRef}
-              className="px-4 py-2 rounded-lg bg-accent/10 border border-accent/40 text-accent text-xs font-bold uppercase tracking-[0.2em] shadow-[0_0_12px_rgba(99,102,241,0.25)]"
-            >
-              Manager
-            </div>
-          </div>
-
-          {/* Agent columns */}
-          <div
-            className="grid gap-6 relative"
-            style={{ zIndex: 1, gridTemplateColumns: `repeat(${Math.max(1, visibleAgents.length)}, minmax(0, 1fr))` }}
-          >
-            {visibleAgents.map(a => (
-              <AgentColumn
-                key={a.agent_id}
-                agent={a}
-                registerAgent={el => {
-                  if (el) agentRefs.current.set(a.agent_id, el)
-                  else agentRefs.current.delete(a.agent_id)
-                }}
-                registerModule={(k, el) => {
-                  if (el) moduleRefs.current.set(k, el)
-                  else moduleRefs.current.delete(k)
-                }}
-                onModuleClick={onModuleClick}
-              />
+          {/* Legend */}
+          <div className="absolute bottom-2 left-2 flex flex-wrap gap-1.5 text-[10px] font-mono pointer-events-none">
+            {Object.entries(PROTOCOL_COLOR).map(([p, c]) => (
+              <span
+                key={p}
+                className="px-1.5 py-0.5 rounded bg-surface-secondary/80 border border-border/50"
+                style={{ color: c }}
+              >
+                {p}
+              </span>
             ))}
           </div>
+          <div className="absolute bottom-2 right-2 text-[10px] font-mono text-text-muted pointer-events-none">
+            drag · wheel zoom · click module
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function AgentColumn({ agent, registerAgent, registerModule, onModuleClick }) {
-  const status = agent.status || 'unknown'
-  const isUnreachable = status === 'unreachable'
-  const modules = agent.last_health?.modules || []
-  const dotColor =
-    status === 'healthy'    ? 'bg-green-500' :
-    status === 'degraded'   ? 'bg-yellow-500' :
-    status === 'unreachable'? 'bg-red-500' :
-                              'bg-gray-500'
-  const borderColor =
-    status === 'healthy'    ? 'border-green-500/30' :
-    status === 'degraded'   ? 'border-yellow-500/30' :
-    status === 'unreachable'? 'border-red-500/30' :
-                              'border-border'
+// ---------------------------------------------------------------------------
+// SVG node components
+// ---------------------------------------------------------------------------
 
-  return (
-    <div className={`flex flex-col items-center ${isUnreachable ? 'opacity-50' : ''}`}>
-      <div
-        ref={registerAgent}
-        className={`px-3 py-1.5 rounded-md border bg-surface-tertiary text-text-primary text-xs font-semibold mb-6 shadow-card ${borderColor}`}
-      >
-        <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle ${dotColor}`} />
-        {agent.agent_id}
-      </div>
-
-      {modules.length === 0 ? (
-        <div className="text-[10px] text-text-muted italic">no modules</div>
-      ) : (
-        <div className="flex flex-col gap-2 items-stretch w-full max-w-[150px]">
-          {modules.map(m => (
-            <ModulePill
-              key={m.name}
-              module={m}
-              agentId={agent.agent_id}
-              isUnreachable={isUnreachable}
-              registerModule={registerModule}
-              onModuleClick={onModuleClick}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ModulePill({ module, agentId, isUnreachable, registerModule, onModuleClick }) {
-  const proto = moduleProtocol(module.name)
-  const key = `${agentId}:${proto}`
-  const isRunning = module.status === 'running'
-  const color = PROTOCOL_COLOR[proto]
-
-  const handleRef = el => {
-    if (el) registerModule(key, el)
-    else registerModule(key, null)
-  }
-
+function ToolbarBtn({ label, title, onClick }) {
   return (
     <button
-      ref={handleRef}
       type="button"
-      onClick={() => { if (!isUnreachable && onModuleClick) onModuleClick(proto, agentId) }}
-      title={`${module.name} — ${module.status}`}
-      style={isRunning && !isUnreachable && color ? { color } : undefined}
-      className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border bg-surface-secondary transition-colors ${
-        isUnreachable
-          ? 'border-gray-500/15 text-gray-500'
-          : isRunning
-            ? 'border-border hover:border-border-light cursor-pointer'
-            : 'border-gray-500/20 text-gray-500 line-through decoration-gray-600 cursor-default'
-      }`}
+      onClick={onClick}
+      title={title}
+      className="px-2 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider bg-surface-tertiary hover:bg-surface-hover border border-border rounded transition-colors text-text-secondary hover:text-text-primary"
     >
-      {module.name}
+      {label}
     </button>
+  )
+}
+
+function ManagerNode({ pos, hovered, dragging, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx } = NODE.manager
+  return (
+    <g
+      transform={`translate(${pos.x - w / 2} ${pos.y - h / 2})`}
+      style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+      onPointerDown={onPointerDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <rect
+        width={w} height={h} rx={rx} ry={rx}
+        fill="rgba(99,102,241,0.12)"
+        stroke="rgba(129,140,248,0.6)"
+        strokeWidth={hovered || dragging ? 2 : 1.4}
+      />
+      <text
+        x={w / 2} y={h / 2 + 4}
+        textAnchor="middle"
+        fontSize="13"
+        fontWeight="700"
+        letterSpacing="3"
+        fill="#a5b4fc"
+        style={{ pointerEvents: 'none' }}
+      >
+        MANAGER
+      </text>
+    </g>
+  )
+}
+
+function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx } = NODE.agent
+  const status = agent.status || 'unknown'
+  const dot =
+    status === 'healthy'     ? '#22c55e' :
+    status === 'degraded'    ? '#eab308' :
+    status === 'unreachable' ? '#ef4444' :
+                               '#6b7280'
+  const stroke =
+    status === 'healthy'     ? 'rgba(34,197,94,0.45)' :
+    status === 'degraded'    ? 'rgba(234,179,8,0.45)' :
+    status === 'unreachable' ? 'rgba(239,68,68,0.45)' :
+                               '#30363d'
+  const opacity = status === 'unreachable' ? 0.55 : 1
+  return (
+    <g
+      transform={`translate(${pos.x - w / 2} ${pos.y - h / 2})`}
+      style={{ cursor: dragging ? 'grabbing' : 'grab', opacity }}
+      onPointerDown={onPointerDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <rect
+        width={w} height={h} rx={rx} ry={rx}
+        fill="#161b22"
+        stroke={stroke}
+        strokeWidth={hovered || dragging ? 2 : 1.2}
+      />
+      <circle cx={14} cy={h / 2} r={4} fill={dot} />
+      <text
+        x={26} y={h / 2 + 4}
+        fontSize="12"
+        fontWeight="600"
+        fill="#e6edf3"
+        style={{ pointerEvents: 'none' }}
+      >
+        {truncate(agent.agent_id, 20)}
+      </text>
+    </g>
+  )
+}
+
+function ModuleNode({ module: mod, pos, unreachable, hovered, dragging, flashing, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx } = NODE.module
+  const proto = moduleProtocol(mod.name)
+  const color = PROTOCOL_COLOR[proto] || '#8b949e'
+  const isRunning = mod.status === 'running'
+  const opacity = unreachable ? 0.45 : isRunning ? 1 : 0.55
+  const fill = flashing ? 'rgba(248,113,113,0.85)' : 'rgba(22,27,34,1)'
+  const stroke = flashing ? '#fca5a5' : isRunning ? color : '#4b5563'
+
+  return (
+    <g
+      transform={`translate(${pos.x - w / 2} ${pos.y - h / 2})`}
+      style={{ cursor: unreachable ? 'default' : (dragging ? 'grabbing' : 'grab'), opacity }}
+      onPointerDown={unreachable ? undefined : onPointerDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {flashing && (
+        <rect
+          x={-6} y={-6} width={w + 12} height={h + 12} rx={rx + 4} ry={rx + 4}
+          fill="none" stroke="#f87171" strokeWidth="2" opacity="0.9"
+        >
+          <animate attributeName="opacity" values="0.9;0" dur="1.4s" fill="freeze" />
+          <animate attributeName="stroke-width" values="2;10" dur="1.4s" fill="freeze" />
+        </rect>
+      )}
+      <rect
+        width={w} height={h} rx={rx} ry={rx}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={hovered || dragging || flashing ? 2 : 1.2}
+        style={{ transition: 'fill 180ms, stroke 180ms' }}
+      />
+      <text
+        x={w / 2} y={h / 2 + 4}
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="600"
+        fill={flashing ? '#1a0a0a' : (isRunning ? color : '#9ca3af')}
+        style={{ pointerEvents: 'none', textDecoration: isRunning ? 'none' : 'line-through' }}
+      >
+        {truncate(mod.name, 18)}
+      </text>
+    </g>
   )
 }
