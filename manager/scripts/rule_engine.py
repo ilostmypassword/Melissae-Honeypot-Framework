@@ -275,6 +275,7 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
             doc = {
                 "rule_id": rule["id"],
                 "rule_name": rule["name"],
+                "rule_mql": rule["mql"],
                 "severity": rule["severity"],
                 "score": rule["score"],
                 "tags": rule["tags"],

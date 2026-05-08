@@ -46,6 +46,7 @@ function buildGroups(list) {
         key,
         rule_id: a.rule_id,
         rule_name: a.rule_name || a.rule_id,
+        rule_mql: a.rule_mql || '',
         ip: a.ip || null,
         severity: a.severity,
         score: a.score || 0,
@@ -264,11 +265,16 @@ export default function Alerts() {
 
   const navigateLogsForAlert = alert => {
     if (!alert) return
+    const ruleMql = (alert.rule_mql || '').trim()
+    if (ruleMql) {
+      navigate(`/search?q=${encodeURIComponent(ruleMql)}`)
+      return
+    }
     if (alert.log_id) {
       navigate(`/search?log_id=${encodeURIComponent(alert.log_id)}`)
       return
     }
-    // Fallback when log_id is missing: build a precise MQL query from log fields.
+    // Fallback when neither rule_mql nor log_id is available: build an MQL query from log fields.
     const log = alert.log || {}
     const parts = []
     const agentId = alert.agent_id || log.agent_id
@@ -285,6 +291,11 @@ export default function Alerts() {
 
   const navigateLogsForGroup = group => {
     if (!group) return
+    const ruleMql = (group.rule_mql || group.members?.[0]?.rule_mql || '').trim()
+    if (ruleMql) {
+      navigate(`/search?q=${encodeURIComponent(ruleMql)}`)
+      return
+    }
     const parts = []
     if (group.ip) parts.push(`ip:${group.ip}`)
     if (group.protocol) parts.push(`protocol:${group.protocol}`)
