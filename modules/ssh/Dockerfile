@@ -20,10 +20,16 @@ RUN mkdir -p /host-logs/ssh && \
     chmod -R 777 /host-logs/ssh && \
     echo 'auth,authpriv.* /host-logs/ssh/sshd.log' >> /etc/rsyslog.d/50-default.conf
 
-RUN echo 'export PROMPT_COMMAND="history -a >( \
-    ip=\$(last -i | grep \$(whoami) | head -n 1 | awk \047{print \$3}\047); \
-    echo \$(date +\"%Y-%m-%d %H:%M:%S\") \| \${ip:-\"Unknown IP\"} \| \$(history 1) >> /host-logs/ssh/commands.log)"' \
-    >> /home/user/.bashrc && \
+RUN { \
+    echo 'log_cmd() {'; \
+    echo '  local ip="${SSH_CLIENT%% *}"'; \
+    echo '  local cmd'; \
+    echo '  cmd=$(HISTTIMEFORMAT= history 1 | sed "s/^ *[0-9][0-9]* *//")'; \
+    echo '  [ -z "$cmd" ] && return'; \
+    echo '  printf "%s | %s | %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "${ip:-Unknown}" "$cmd" >> /host-logs/ssh/commands.log'; \
+    echo '}'; \
+    echo 'PROMPT_COMMAND=log_cmd'; \
+    } >> /home/user/.bashrc && \
     chown user:user /home/user/.bashrc
 
 RUN printf '#!/bin/bash\nrm -f /run/rsyslogd.pid\ntouch /host-logs/ssh/sshd.log /host-logs/ssh/commands.log\nchmod 666 /host-logs/ssh/sshd.log /host-logs/ssh/commands.log\nrsyslogd\nsleep 1\nexec /usr/sbin/sshd -D\n' > /usr/local/bin/start-services.sh && \
