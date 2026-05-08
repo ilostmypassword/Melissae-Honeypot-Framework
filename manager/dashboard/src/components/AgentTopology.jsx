@@ -126,17 +126,11 @@ function buildGraph(agents) {
   return graph
 }
 
-// Default initial positions: manager at top, agents arranged in a grid that
-// scales with their count, protocols fanned out radially under each agent.
-// The simulation then resolves remaining overlaps and the auto-fit zooms
-// out so the whole tree always remains visible — even with dozens of agents.
 function seedPositions(graph) {
   const pos = {}
   const agentIds = Object.values(graph).filter(n => n.kind === 'agent').map(n => n.id)
   const n = Math.max(1, agentIds.length)
 
-  // Pick a column count that roughly matches the canvas aspect ratio.
-  // ratio ≈ 3 (1600/540) so we want a wider-than-tall grid.
   const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * 2.4))))
   const rows = Math.ceil(n / cols)
   const colSpacing = 320
