@@ -146,7 +146,6 @@ export default function Map() {
                   <th className="text-left py-2 px-3">IP</th>
                   <th className="text-left py-2 px-3">Verdict</th>
                   <th className="text-right py-2 px-3">Score</th>
-                  <th className="text-right py-2 px-3">Confidence</th>
                   <th className="text-left py-2 px-3">Reasons</th>
                   <th className="text-left py-2 px-3">First Seen</th>
                   <th className="text-left py-2 px-3">Last Seen</th>
@@ -167,9 +166,6 @@ export default function Map() {
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono text-text-secondary">
                         {t['protocol-score'] ?? '—'}/100
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-text-secondary">
-                        {Number.isFinite(t.confidence) ? `${Math.round(t.confidence * 100)}%` : '—'}
                       </td>
                       <td className="py-2.5 px-3 text-text-muted text-xs max-w-xs truncate">
                         {Array.isArray(t.reasons) ? t.reasons.slice(0, 3).join(' · ') : '—'}

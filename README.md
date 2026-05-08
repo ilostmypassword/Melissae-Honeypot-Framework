@@ -31,7 +31,7 @@ All communications between agents and the manager are authenticated and encrypte
 
 The framework ships with **7 honeypot modules** : Web (Nginx + Apache), SSH, FTP, Modbus/ICS, MQTT, Telnet. As well as **CVE-specific modules** that reproduce real vulnerabilities to detect targeted exploitation. Modules run in isolated Docker containers and can be enabled or disabled per agent through the interactive CLI or the configuration file.
 
-On the manager side, a **continuous scoring engine** evaluates each observed IP on a 0–100 scale using weighted signals (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation) combined with a multi-factor confidence model. Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
+On the manager side, a **rule-based alerting engine** evaluates each observed IP on a 0–100 scale by accumulating the score of every YAML detection rule that matches its activity (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation). Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
 
 <br>
 
@@ -144,7 +144,7 @@ The complete documentation is hosted on Read the Docs.
 | 🏗️ | [Architecture](https://melissae-documentation.readthedocs.io/en/latest/architecture.html) | Manager/agent model, mTLS, PKI, workflow |
 | 📦 | [Modules](https://melissae-documentation.readthedocs.io/en/latest/modules.html) | Honeypot modules, log formats, configuration |
 | 📊 | [Dashboard](https://melissae-documentation.readthedocs.io/en/latest/dashboard.html) | Dashboard pages, search engine, threat intelligence |
-| 🎯 | [Scoring](https://melissae-documentation.readthedocs.io/en/latest/scoring.html) | Threat scoring signals, verdicts, confidence |
+| 🎯 | [Scoring](https://melissae-documentation.readthedocs.io/en/latest/scoring.html) | Threat scoring signals, rules and verdicts |
 | 🚀 | [Getting Started](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html) | Installation, enrollment, configuration |
 | ⌨️ | [CLI Reference](https://melissae-documentation.readthedocs.io/en/latest/cli-reference.html) | Manager and agent commands |
 | 🤝 | [Contributing](https://melissae-documentation.readthedocs.io/en/latest/contributing.html) | Roadmap and how to contribute |
