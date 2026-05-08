@@ -5,7 +5,7 @@ severity: high
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 5m
-mql: 'protocol:ftp AND action:Login failed'
+mql: 'protocol:ftp AND action:"Login failed"'
 group_by: ip
 threshold: 5
 score: 30

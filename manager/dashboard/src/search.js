@@ -1,111 +1,138 @@
-// Check if a log entry matches a single search term
-function matchesTerm(log, term) {
-  let isNegation = false
-  term = term.trim()
+// MQL parser mirroring
 
-  if (/^(NOT\s+|!)/i.test(term)) {
-    isNegation = true
-    term = term.replace(/^(NOT\s+|!)/i, '').trim()
-  }
-
-  let match = false
-
-  if (term.includes(':')) {
-    const colonIdx = term.indexOf(':')
-    const field = term.slice(0, colonIdx).toLowerCase()
-    const value = term.slice(colonIdx + 1).toLowerCase()
-
-    switch (field) {
-      case 'protocol':   match = log.protocol?.toLowerCase().includes(value); break
-      case 'action':     match = log.action?.toLowerCase().includes(value); break
-      case 'ip':         match = log.ip?.toLowerCase().includes(value); break
-      case 'date':       match = log.date?.toLowerCase().includes(value); break
-      case 'hour':       match = checkHourMatch(log.hour, value); break
-      case 'user':       match = (log.user || '').toLowerCase().includes(value); break
-      case 'user-agent': match = log['user-agent']?.toLowerCase().includes(value); break
-      case 'path':       match = log.path?.toLowerCase().includes(value); break
-      case 'cve':        match = (log.cve || '').toLowerCase().includes(value); break
-      case 'agent':
-      case 'agent_id':   match = (log.agent_id || '').toLowerCase().includes(value); break
-      default:           match = false
-    }
-  } else {
-    match = Object.values(log).some(val =>
-      String(val).toLowerCase().includes(term.toLowerCase())
-    )
-  }
-
-  return isNegation ? !match : match
+const FIELDS = {
+  protocol:    log => log.protocol,
+  action:      log => log.action,
+  ip:          log => log.ip,
+  date:        log => log.date,
+  user:        log => log.user,
+  'user-agent': log => log['user-agent'],
+  path:        log => log.path,
+  cve:         log => log.cve,
+  agent:       log => log.agent_id,
+  agent_id:    log => log.agent_id,
 }
 
-// Check if a log timestamp matches an hour filter
 function checkHourMatch(logHour, searchValue) {
   if (!logHour) return false
-  const logHourPart = logHour.toLowerCase().split(':')[0]
-  const searchHour = searchValue.toLowerCase().split(':')[0]
-  return logHourPart === searchHour
+  return String(logHour).toLowerCase().split(':')[0] === String(searchValue).toLowerCase().split(':')[0]
 }
 
-// Execute a search query with AND/OR/NOT logic
-export function searchLogs(logs, query) {
-  const termsWithOperators = query.split(/(\bAND\b|\bOR\b)/i)
-  const searchGroups = []
-  let currentGroup = []
-  let lastOperator = 'AND'
+function unquote(s) {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1)
+  return s
+}
 
-  termsWithOperators.forEach(term => {
-    term = term.trim()
-    if (!term) return
+function matchesTerm(log, term) {
+  term = term.trim()
+  if (!term) return false
 
-    if (/^AND$/i.test(term)) {
-      if (currentGroup.length > 0) {
-        searchGroups.push({ terms: currentGroup, operator: lastOperator })
-        currentGroup = []
-      }
-      lastOperator = 'AND'
-    } else if (/^OR$/i.test(term)) {
-      if (currentGroup.length > 0) {
-        searchGroups.push({ terms: currentGroup, operator: lastOperator })
-        currentGroup = []
-      }
-      lastOperator = 'OR'
-    } else {
-      if (term.length >= 2) {
-        if (term.includes(':') && term.split(':')[1].trim() === '') return
-        currentGroup.push(term)
-      }
-    }
-  })
-
-  if (currentGroup.length > 0) {
-    searchGroups.push({ terms: currentGroup, operator: lastOperator })
+  // field:value or field:"value with spaces"
+  const m = /^([A-Za-z_][\w-]*):(.*)$/s.exec(term)
+  if (m) {
+    const field = m[1].toLowerCase()
+    const value = unquote(m[2]).toLowerCase()
+    if (!value) return false
+    if (field === 'hour') return checkHourMatch(log.hour, value)
+    if (!Object.hasOwn(FIELDS, field)) return false
+    const getter = FIELDS[field]
+    return String(getter(log) || '').toLowerCase().includes(value)
   }
 
-  if (searchGroups.length === 0) return { results: [], terms: [] }
-
-  let filteredLogs = []
-
-  searchGroups.forEach((group, index) => {
-    const groupResults = logs.filter(log =>
-      group.terms.every(term => matchesTerm(log, term))
-    )
-
-    if (index === 0) {
-      filteredLogs = groupResults
-    } else {
-      if (group.operator === 'AND') {
-        filteredLogs = filteredLogs.filter(log =>
-          groupResults.some(r => r === log)
-        )
-      } else {
-        const newLogs = groupResults.filter(log =>
-          !filteredLogs.some(f => f === log)
-        )
-        filteredLogs = [...filteredLogs, ...newLogs]
-      }
-    }
-  })
-
-  return { results: filteredLogs, terms: searchGroups.flatMap(g => g.terms) }
+  const needle = unquote(term).toLowerCase()
+  if (!needle) return false
+  return Object.values(log).some(v => String(v ?? '').toLowerCase().includes(needle))
 }
 
+// Tokenizer
+const TOKEN_RE = /\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s():"]+:"[^"]*"|"[^"]*"|[^\s()]+/gi
+const KEYWORDS = new Set(['AND', 'OR', 'NOT'])
+
+function tokenize(query) {
+  return query.match(TOKEN_RE) || []
+}
+
+class Parser {
+  constructor(tokens) {
+    this.tokens = tokens
+    this.pos = 0
+  }
+  peek() { return this.pos < this.tokens.length ? this.tokens[this.pos] : null }
+  peekUpper() { const t = this.peek(); return t == null ? null : t.toUpperCase() }
+  consume() { return this.pos < this.tokens.length ? this.tokens[this.pos++] : null }
+
+  parseOr() {
+    let left = this.parseAnd()
+    while (this.peekUpper() === 'OR') {
+      this.consume()
+      left = ['OR', left, this.parseAnd()]
+    }
+    return left
+  }
+
+  parseAnd() {
+    let left = this.parseFactor()
+    while (true) {
+      const nxt = this.peekUpper()
+      if (nxt == null || nxt === ')' || nxt === 'OR') break
+      if (nxt === 'AND') this.consume()
+      left = ['AND', left, this.parseFactor()]
+    }
+    return left
+  }
+
+  parseFactor() {
+    const tok = this.peek()
+    if (tok == null) return ['TRUE']
+    const upper = tok.toUpperCase()
+    if (upper === 'NOT' || tok === '!') {
+      this.consume()
+      return ['NOT', this.parseFactor()]
+    }
+    if (tok === '(') {
+      this.consume()
+      const inner = this.parseOr()
+      if (this.peek() === ')') this.consume()
+      return inner
+    }
+    if (KEYWORDS.has(upper) || tok === ')') {
+      this.consume()
+      return ['TRUE']
+    }
+    this.consume()
+    return ['TERM', tok]
+  }
+}
+
+function evalNode(node, log) {
+  switch (node[0]) {
+    case 'TRUE': return true
+    case 'TERM': return matchesTerm(log, node[1])
+    case 'NOT':  return !evalNode(node[1], log)
+    case 'AND':  return evalNode(node[1], log) && evalNode(node[2], log)
+    case 'OR':   return evalNode(node[1], log) || evalNode(node[2], log)
+    default:     return false
+  }
+}
+
+function collectTerms(node, out) {
+  if (!node) return out
+  if (node[0] === 'TERM') {
+    const t = node[1]
+    const m = /^([A-Za-z_][\w-]*):(.*)$/s.exec(t)
+    out.push(unquote(m ? m[2] : t))
+  } else {
+    for (let i = 1; i < node.length; i++) collectTerms(node[i], out)
+  }
+  return out
+}
+
+// Execute a search query with AND/OR/NOT logic and parenthesized groups
+export function searchLogs(logs, query) {
+  if (!query || !query.trim()) return { results: [], terms: [] }
+  const tokens = tokenize(query)
+  if (tokens.length === 0) return { results: [], terms: [] }
+  const tree = new Parser(tokens).parseOr()
+  const results = logs.filter(log => evalNode(tree, log))
+  return { results, terms: collectTerms(tree, []) }
+}
