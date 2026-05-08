@@ -53,6 +53,7 @@ export default {
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'shimmer': 'shimmer 2s linear infinite',
+        'attack-flash': 'attackFlash 1.4s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -66,6 +67,11 @@ export default {
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
+        },
+        attackFlash: {
+          '0%':   { backgroundColor: 'rgba(248, 113, 113, 0.65)', borderColor: 'rgba(248, 113, 113, 0.95)', boxShadow: '0 0 14px 3px rgba(248, 113, 113, 0.7)', transform: 'scale(1.06)' },
+          '40%':  { backgroundColor: 'rgba(248, 113, 113, 0.45)', borderColor: 'rgba(248, 113, 113, 0.8)',  boxShadow: '0 0 10px 2px rgba(248, 113, 113, 0.5)', transform: 'scale(1.03)' },
+          '100%': { backgroundColor: 'rgba(248, 113, 113, 0.0)',  borderColor: 'rgba(248, 113, 113, 0.0)',  boxShadow: '0 0 0 0 rgba(248, 113, 113, 0)',       transform: 'scale(1)' },
         },
       },
     },

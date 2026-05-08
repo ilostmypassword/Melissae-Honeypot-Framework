@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchAgents } from '../api'
-import { DailyChart, ActivityChart, Heatmap, AgentBarChart } from '../components/charts'
+import { DailyChart, ActivityChart, Heatmap, AgentBarChart, ProtocolTimelineChart } from '../components/charts'
 import { filterByDateRange, formatNumber } from '../utils'
 
 const DATE_RANGES = [
@@ -87,6 +87,14 @@ export default function ActivityStats() {
         <h3 className="section-title mb-4">Daily Timeline</h3>
         <div className="h-[260px]">
           <DailyChart logs={filteredLogs} onDayClick={d => goSearch(`date:${d}`)} />
+        </div>
+      </div>
+
+      {/* Protocol Timeline (moved from Dashboard) */}
+      <div className="glass-card p-5">
+        <h3 className="section-title mb-4">Protocol Timeline</h3>
+        <div className="h-[220px]">
+          <ProtocolTimelineChart logs={filteredLogs} />
         </div>
       </div>
 
