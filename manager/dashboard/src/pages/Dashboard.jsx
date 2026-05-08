@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { fetchLogs, fetchAgents, fetchAlerts } from '../api'
 import StatCard from '../components/StatCard'
 import { SeverityTag } from '../components/Tags'
-import { DailyChart, ProtocolChart, ProtocolTimelineChart } from '../components/charts'
+import { DailyChart, ProtocolChart } from '../components/charts'
+import AgentTopology from '../components/AgentTopology'
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 
 const REFRESH_INTERVAL = 30_000
@@ -194,13 +195,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Protocol Timeline */}
-      <div className="glass-card p-5">
-        <h3 className="section-title mb-4">Protocol Timeline</h3>
-        <div className="h-[220px]">
-          <ProtocolTimelineChart logs={filteredLogs} />
-        </div>
-      </div>
+      {/* Live attack topology */}
+      <AgentTopology
+        agents={agents}
+        logs={filteredLogs}
+        onModuleClick={(protocol, agentId) => navigate(
+          `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
+        )}
+      />
     </div>
   )
 }
