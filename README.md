@@ -31,7 +31,7 @@ All communications between agents and the manager are authenticated and encrypte
 
 The framework ships with **7 honeypot modules** : Web (Nginx + Apache), SSH, FTP, Modbus/ICS, MQTT, Telnet. As well as **CVE-specific modules** that reproduce real vulnerabilities to detect targeted exploitation. Modules run in isolated Docker containers and can be enabled or disabled per agent through the interactive CLI or the configuration file.
 
-On the manager side, a **rule-based alerting engine** evaluates each observed IP on a 0–100 scale by accumulating the score of every YAML detection rule that matches its activity (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation). Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
+On the manager side, a **rule-based alerting engine** evaluates each observed IP on a 0–100 scale by accumulating the score of every YAML detection rule that matches its activity (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation). Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a live attack topology, rule-triggered alerts grouped by IP, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
 
 <br>
 
