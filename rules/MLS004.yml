@@ -5,7 +5,7 @@ severity: critical
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 1m
-mql: 'protocol:ftp AND action:Login successful'
+mql: 'protocol:ftp AND action:"Login successful"'
 group_by: ip
 threshold: 1
 score: 70

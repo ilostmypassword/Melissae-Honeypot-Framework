@@ -26,6 +26,8 @@ RUN { \
     echo '  local cmd'; \
     echo '  cmd=$(HISTTIMEFORMAT= history 1 | sed "s/^ *[0-9][0-9]* *//")'; \
     echo '  [ -z "$cmd" ] && return'; \
+    echo '  cmd=${cmd//$'"'"'\n'"'"'/ }'; \
+    echo '  cmd=${cmd//$'"'"'\r'"'"'/ }'; \
     echo '  printf "%s | %s | %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "${ip:-Unknown}" "$cmd" >> /host-logs/ssh/commands.log'; \
     echo '}'; \
     echo 'PROMPT_COMMAND=log_cmd'; \

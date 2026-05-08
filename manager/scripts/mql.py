@@ -23,16 +23,25 @@ def _match_hour(log_hour: str, search_value: str) -> bool:
     return log_h == search_h
 
 
+def _unquote(s: str) -> str:
+    if len(s) >= 2 and s.startswith('"') and s.endswith('"'):
+        return s[1:-1]
+    return s
+
+
+_FIELD_TERM_RE = re.compile(r'^([A-Za-z_][\w-]*):(.*)$', re.DOTALL)
+
+
 def _match_simple_term(log: Dict, term: str) -> bool:
     """Match a single field:value or bareword term."""
     term = term.strip()
     if not term:
         return False
 
-    if ":" in term:
-        field, _, value = term.partition(":")
-        field = field.strip().lower()
-        value = value.strip().lower()
+    m = _FIELD_TERM_RE.match(term)
+    if m:
+        field = m.group(1).lower()
+        value = _unquote(m.group(2)).lower()
         if not value:
             return False
         if field == "hour":
@@ -42,12 +51,17 @@ def _match_simple_term(log: Dict, term: str) -> bool:
             return False
         return value in str(getter(log) or "").lower()
 
-    needle = term.lower()
+    needle = _unquote(term).lower()
+    if not needle:
+        return False
     return any(needle in str(v or "").lower() for v in log.values())
 
 
-# Tokenizer: parens, AND/OR/NOT keywords, '!' prefix, or run of non-space non-paren chars.
-_TOKEN_RE = re.compile(r'\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s()]+', re.IGNORECASE)
+# Tokenizer
+_TOKEN_RE = re.compile(
+    r'\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s():"]+:"[^"]*"|"[^"]*"|[^\s()]+',
+    re.IGNORECASE,
+)
 
 _KEYWORDS = {"AND", "OR", "NOT"}
 
