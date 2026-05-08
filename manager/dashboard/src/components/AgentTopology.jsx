@@ -5,12 +5,12 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 // ---------------------------------------------------------------------------
 
 const PROTOCOL_COLOR = {
-  ssh:    '#38bdf8',
-  http:   '#86efac',
-  ftp:    '#f9a8d4',
-  modbus: '#a78bfa',
-  mqtt:   '#fdba74',
-  telnet: '#fda4af',
+  ssh:    '#5b8db8',  // muted steel blue
+  http:   '#7aa886',  // muted sage green
+  ftp:    '#b08aa0',  // muted dusty pink
+  modbus: '#8a82b0',  // muted lavender
+  mqtt:   '#c0926a',  // muted amber
+  telnet: '#b08585',  // muted terracotta
 }
 
 // SVG world dimensions — the viewBox the user pans/zooms inside.
@@ -126,25 +126,49 @@ function buildGraph(agents) {
   return graph
 }
 
-// Default initial positions: manager top center; agents spread; protocols fan
-// out radially under their parent agent. The simulation then refines.
+// Default initial positions: manager at top, agents arranged in a grid that
+// scales with their count, protocols fanned out radially under each agent.
+// The simulation then resolves remaining overlaps and the auto-fit zooms
+// out so the whole tree always remains visible — even with dozens of agents.
 function seedPositions(graph) {
   const pos = {}
   const agentIds = Object.values(graph).filter(n => n.kind === 'agent').map(n => n.id)
   const n = Math.max(1, agentIds.length)
+
+  // Pick a column count that roughly matches the canvas aspect ratio.
+  // ratio ≈ 3 (1600/540) so we want a wider-than-tall grid.
+  const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * 2.4))))
+  const rows = Math.ceil(n / cols)
+  const colSpacing = 320
+  const rowSpacing = 360
+
+  const gridW = (cols - 1) * colSpacing
+  const gridStartX = CANVAS_W / 2 - gridW / 2
+
   pos['manager'] = { x: CANVAS_W / 2, y: 70 }
+
   agentIds.forEach((aId, i) => {
-    const x = (CANVAS_W * (i + 1)) / (n + 1)
-    pos[aId] = { x, y: 230 }
+    const row = Math.floor(i / cols)
+    const col = i % cols
+    // Last row may be partial — center it under the rest.
+    const isLastRow = row === rows - 1
+    const lastRowCount = n - row * cols
+    const offset = isLastRow && lastRowCount < cols
+      ? ((cols - lastRowCount) * colSpacing) / 2
+      : 0
+    const x = gridStartX + col * colSpacing + offset
+    const y = 230 + row * rowSpacing
+    pos[aId] = { x, y }
+
     const children = Object.values(graph).filter(c => c.parent === aId)
     const k = children.length
-    const spread = Math.min(110, (k - 1) * 30) * Math.PI / 180
+    const spread = Math.min(140, (k - 1) * 32) * Math.PI / 180
     children.forEach((c, j) => {
       const t = k <= 1 ? 0 : j / (k - 1) - 0.5
       const angle = t * spread
       pos[c.id] = {
         x: x + Math.sin(angle) * 130,
-        y: 230 + Math.cos(angle) * 130 + 30,
+        y: y + Math.cos(angle) * 130 + 30,
       }
     })
   })
@@ -317,8 +341,9 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       drag.moved = true
       const node = physRef.current.nodes[drag.id]
       if (node) {
-        node.x = clamp(world.x - drag.offX, node.dims.w / 2, CANVAS_W - node.dims.w / 2)
-        node.y = clamp(world.y - drag.offY, node.dims.h / 2, CANVAS_H - node.dims.h / 2)
+        // No hard world boundaries — auto-fit will zoom to follow.
+        node.x = world.x - drag.offX
+        node.y = world.y - drag.offY
         node.vx = 0
         node.vy = 0
       }
@@ -698,9 +723,10 @@ function stepPhysics(nodes) {
     n.x += n.vx
     n.y += n.vy
 
-    // Keep within world bounds (taking node dims into account).
-    n.x = clamp(n.x, n.dims.w / 2, CANVAS_W - n.dims.w / 2)
-    n.y = clamp(n.y, n.dims.h / 2, CANVAS_H - n.dims.h / 2)
+    // No fixed world bounds: auto-fit handles visibility, even for dozens
+    // of agents. We only catch pathological NaN drifts.
+    if (!Number.isFinite(n.x)) n.x = CANVAS_W / 2
+    if (!Number.isFinite(n.y)) n.y = CANVAS_H / 2
 
     const ke = Math.abs(n.vx) + Math.abs(n.vy)
     if (ke > maxKE) maxKE = ke
@@ -759,9 +785,9 @@ function ManagerNode({ pos, dims, hovered, dragging, pinned, onPointerDown, onMo
     >
       <rect
         width={w} height={h} rx={rx} ry={rx}
-        fill="rgba(99,102,241,0.14)"
-        stroke="rgba(129,140,248,0.7)"
-        strokeWidth={hovered || dragging ? 2.4 : 1.6}
+        fill="rgba(99,102,141,0.10)"
+        stroke="rgba(129,140,168,0.55)"
+        strokeWidth={hovered || dragging ? 2.2 : 1.4}
       />
       {pinned && <PinIndicator x={w - 10} y={10} />}
       <text
@@ -770,7 +796,7 @@ function ManagerNode({ pos, dims, hovered, dragging, pinned, onPointerDown, onMo
         fontSize={font}
         fontWeight="800"
         letterSpacing="3"
-        fill="#a5b4fc"
+        fill="#9ca3b8"
         style={{ pointerEvents: 'none' }}
       >
         MANAGER
@@ -783,14 +809,14 @@ function AgentNode({ agent, pos, dims, hovered, dragging, pinned, onPointerDown,
   const { w, h, rx, font } = dims
   const status = agent.status || 'unknown'
   const dot =
-    status === 'healthy'     ? '#22c55e' :
-    status === 'degraded'    ? '#eab308' :
-    status === 'unreachable' ? '#ef4444' :
+    status === 'healthy'     ? '#5a9d6a' :
+    status === 'degraded'    ? '#b89a4a' :
+    status === 'unreachable' ? '#b06060' :
                                '#6b7280'
   const stroke =
-    status === 'healthy'     ? 'rgba(34,197,94,0.5)' :
-    status === 'degraded'    ? 'rgba(234,179,8,0.5)' :
-    status === 'unreachable' ? 'rgba(239,68,68,0.5)' :
+    status === 'healthy'     ? 'rgba(90,157,106,0.45)' :
+    status === 'degraded'    ? 'rgba(184,154,74,0.45)' :
+    status === 'unreachable' ? 'rgba(176,96,96,0.45)' :
                                '#30363d'
   const opacity = status === 'unreachable' ? 0.55 : 1
   return (
@@ -827,8 +853,8 @@ function ProtocolNode({ proto, pos, dims, unreachable, hovered, dragging, pinned
   const color = PROTOCOL_COLOR[proto.protocol] || '#8b949e'
   const isRunning = proto.running
   const opacity = unreachable ? 0.45 : isRunning ? 1 : 0.55
-  const fill = flashing ? 'rgba(248,113,113,0.85)' : 'rgba(22,27,34,1)'
-  const stroke = flashing ? '#fca5a5' : isRunning ? color : '#4b5563'
+  const fill = flashing ? 'rgba(180,90,90,0.78)' : 'rgba(22,27,34,1)'
+  const stroke = flashing ? '#c97878' : isRunning ? color : '#4b5563'
   const titleAttr = proto.names.length > 0 ? proto.names.join(', ') : proto.protocol
 
   return (
