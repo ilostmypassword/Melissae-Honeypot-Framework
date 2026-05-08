@@ -32,8 +32,8 @@ def _unquote(s: str) -> str:
 _FIELD_TERM_RE = re.compile(r'^([A-Za-z_][\w-]*):(.*)$', re.DOTALL)
 
 
+# Match a single field:value or bareword term
 def _match_simple_term(log: Dict, term: str) -> bool:
-    """Match a single field:value or bareword term."""
     term = term.strip()
     if not term:
         return False
@@ -147,8 +147,8 @@ def _eval(node: Tuple, log: Dict) -> bool:
     return False
 
 
+# Return True if a single log entry satisfies the MQL query
 def match_log(log: Dict, query: str) -> bool:
-    """Return True if a single log entry satisfies the MQL query."""
     if not query or not query.strip():
         return True
     tokens = _tokenize(query)
@@ -159,8 +159,8 @@ def match_log(log: Dict, query: str) -> bool:
     return _eval(tree, log)
 
 
+# Return logs matching the MQL query
 def filter_logs(logs: Iterable[Dict], query: str) -> List[Dict]:
-    """Return logs matching the MQL query."""
     if not query or not query.strip():
         return list(logs)
     return [log for log in logs if match_log(log, query)]

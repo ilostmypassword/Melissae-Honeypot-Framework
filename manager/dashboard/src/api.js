@@ -1,7 +1,6 @@
 const API_BASE = '/api'
 
-// Fetch paginated logs from the API. Accepts a string (agent_id) or
-// an options object: { agent_id, log_id }.
+// Fetch paginated logs (accepts an agent_id string or { agent_id, log_id })
 export async function fetchLogs(opts = {}) {
   const options = typeof opts === 'string' ? { agent_id: opts } : (opts || {})
   const params = new URLSearchParams()

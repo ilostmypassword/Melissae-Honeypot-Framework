@@ -210,8 +210,6 @@ class HealthHandler(BaseHTTPRequestHandler):
             targets = list(known)
         else:
             container_name = f'melissae_{module}'
-            # Validate against the discovered set — targets is built from known,
-            # not from user input, which cuts the taint flow.
             targets = [n for n in known if n == container_name]
             if not targets:
                 return {'action': action, 'module': module, 'success': False,

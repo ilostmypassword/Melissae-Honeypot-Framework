@@ -274,7 +274,6 @@ export default function Alerts() {
       navigate(`/search?log_id=${encodeURIComponent(alert.log_id)}`)
       return
     }
-    // Fallback when neither rule_mql nor log_id is available: build an MQL query from log fields.
     const log = alert.log || {}
     const parts = []
     const agentId = alert.agent_id || log.agent_id

@@ -27,12 +27,8 @@ ALERT_RETENTION_DAYS = 90
 _LOOKBACK_RE = re.compile(r"^\s*(\d+)\s*([smhd])\s*$", re.IGNORECASE)
 
 
-# ---------------------------------------------------------------------------
-# Lookback / cron helpers
-# ---------------------------------------------------------------------------
-
+# Parse a lookback string like '5m', '2h', '1d'. Defaults to 5 minutes.
 def parse_lookback(value: str) -> timedelta:
-    """Parse a lookback string like '5m', '2h', '1d'. Defaults to 5 minutes."""
     if not isinstance(value, str):
         return timedelta(minutes=5)
     m = _LOOKBACK_RE.match(value)
@@ -47,8 +43,8 @@ def parse_lookback(value: str) -> timedelta:
     }[unit]
 
 
+# Expand a single cron field into the set of matching integers
 def _expand_cron_field(field: str, lo: int, hi: int) -> set:
-    """Expand a single cron field into the set of matching integers."""
     result: set = set()
     for piece in field.split(","):
         piece = piece.strip()
@@ -85,8 +81,8 @@ def _expand_cron_field(field: str, lo: int, hi: int) -> set:
     return result
 
 
+# Minimal 5-field cron matcher (minute hour dom month dow). dow: 0=Sunday
 def cron_matches(expr: str, dt: datetime) -> bool:
-    """Minimal 5-field cron matcher (minute hour dom month dow). dow: 0=Sunday."""
     if not expr or not isinstance(expr, str):
         return False
     parts = expr.split()
@@ -106,10 +102,7 @@ def cron_matches(expr: str, dt: datetime) -> bool:
     )
 
 
-# ---------------------------------------------------------------------------
-# Rule loading
-# ---------------------------------------------------------------------------
-
+# Validate a parsed YAML rule and normalize its fields
 def _validate_rule(raw: Dict, source: str) -> Optional[Dict]:
     if not isinstance(raw, dict):
         print(f"[rule_engine] {source}: not a YAML mapping, skipped")
@@ -156,8 +149,8 @@ def _validate_rule(raw: Dict, source: str) -> Optional[Dict]:
     }
 
 
+# Load and validate all *.yml/*.yaml rules from rules_dir
 def load_rules(rules_dir: str = RULES_DIR) -> List[Dict]:
-    """Load and validate all *.yml/*.yaml rules from rules_dir."""
     base = Path(rules_dir)
     if not base.is_dir():
         print(f"[rule_engine] rules dir not found: {rules_dir}")
@@ -184,10 +177,6 @@ def load_rules(rules_dir: str = RULES_DIR) -> List[Dict]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Execution
-# ---------------------------------------------------------------------------
-
 def _alert_id(rule_id: str, log_id: str) -> str:
     return hashlib.sha256(f"{rule_id}|{log_id}".encode("utf-8")).hexdigest()
 
@@ -205,8 +194,8 @@ def _log_event_time(log: Dict) -> Optional[str]:
     return None
 
 
+# Stable id for a log: prefer stored hash/_id, fall back to digest of key fields
 def _log_unique_id(log: Dict) -> str:
-    """Stable id for a log: prefer stored hash/_id, fall back to digest of key fields."""
     for k in ("_id", "hash"):
         v = log.get(k)
         if isinstance(v, str) and v:
@@ -216,8 +205,8 @@ def _log_unique_id(log: Dict) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+# Fetch logs newer than (now - lookback). Uses date+hour fallback
 def _fetch_logs(db, lookback: timedelta) -> List[Dict]:
-    """Fetch logs newer than (now - lookback). Uses date+hour fallback."""
     cutoff_dt = datetime.now(timezone.utc) - lookback
     cutoff_iso = cutoff_dt.isoformat()
     cutoff_date = cutoff_dt.strftime("%Y-%m-%d")
@@ -230,11 +219,8 @@ def _fetch_logs(db, lookback: timedelta) -> List[Dict]:
     return list(db["logs"].find(query, {}).limit(50000))
 
 
+# Run a single rule against the DB; returns (alerts_emitted, groups_triggered)
 def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
-    """
-    Run a single rule against the DB.
-    Returns (alerts_emitted, groups_triggered).
-    """
     if not rule.get("enabled", True):
         return (0, 0)
 
@@ -246,7 +232,7 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
         try:
             if match_log(log, rule["mql"]):
                 matched.append(log)
-        except Exception as e:  # defensive: a malformed query shouldn't kill the engine
+        except Exception as e:
             print(f"[rule_engine] {rule['id']}: MQL eval error: {e}")
             return (0, 0)
 
@@ -344,11 +330,11 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
     return (emitted, len(triggered_groups))
 
 
+# Entry point: run all rules due to fire at `now` (default: utcnow())
 def run_due_rules(now: Optional[datetime] = None,
                   rules_dir: str = RULES_DIR,
                   mongo_uri: str = MONGO_URI,
                   db_name: str = DB_NAME) -> Dict:
-    """Entry point: run all rules due to fire at `now` (default: utcnow())."""
     if now is None:
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
 

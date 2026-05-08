@@ -30,9 +30,8 @@ def get_db():
     client = MongoClient(MONGO_URI)
     return client[DB_NAME]
 
-# Sanitize a string value (strip $ operators, limit length)
+# Sanitize a string field: strip control chars, limit length, block $ operators
 def _sanitize_str(val, max_len=MAX_FIELD_LEN):
-    """Sanitize a string field: strip control chars, limit length, block $ operators."""
     if not isinstance(val, str):
         return str(val)[:max_len] if val is not None else ""
     cleaned = "".join(c for c in val if c.isprintable())
@@ -152,10 +151,6 @@ def api_killchain(ip):
 @app.route("/api/ingest", methods=["POST"])
 # POST /api/ingest — Receive and deduplicate logs from agents
 def api_ingest():
-    """
-    Receives a batch of parsed logs from an agent.
-    Nginx terminates mTLS and injects X-SSL-Client-CN header.
-    """
     client_cn = request.headers.get("X-SSL-Client-CN", "")
     if not client_cn:
         return jsonify({"error": "Missing client certificate CN"}), 401
@@ -361,11 +356,6 @@ def api_geoip_details(ip):
 @app.route("/api/enroll", methods=["POST"])
 # POST /api/enroll — Agent enrollment with one-time token
 def api_enroll():
-    """
-    Agent enrollment via one-time token.
-    The manager CLI generates a token and stores it in MongoDB.
-    The agent sends the token to receive its certificate bundle.
-    """
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Invalid JSON body"}), 400
