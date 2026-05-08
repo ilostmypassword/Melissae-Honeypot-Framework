@@ -35,11 +35,11 @@ export default function Dashboard() {
       const [logsData, agentsData, alertsData] = await Promise.all([
         fetchLogs(),
         fetchAgents().catch(() => []),
-        fetchAlerts({ status: 'new', limit: 5 }).catch(() => []),
+        fetchAlerts({ status: 'new', limit: 3 }).catch(() => []),
       ])
       setLogs(logsData)
       setAgents(agentsData)
-      setRecentAlerts(Array.isArray(alertsData) ? alertsData.slice(0, 5) : [])
+      setRecentAlerts(Array.isArray(alertsData) ? alertsData.slice(0, 3) : [])
       setLastRefresh(Date.now())
       setError(null)
     } catch (err) {
