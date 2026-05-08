@@ -115,8 +115,8 @@ def batch_geolocate(ips: List[str]) -> Dict[str, Dict]:
     return results
 
 
+# Group alerts (last N days) by IP
 def _aggregate_alerts_by_ip(db) -> Dict[str, Dict]:
-    """Group alerts (last N days) by IP."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=ALERTS_LOOKBACK_DAYS)).isoformat()
     cursor = db["alerts"].find(
         {"created_at": {"$gte": cutoff}, "ip": {"$ne": None}},
@@ -166,8 +166,8 @@ def _aggregate_alerts_by_ip(db) -> Dict[str, Dict]:
     return by_ip
 
 
+# Aggregate the alerts of an IP into a threat document with a 0-100 score
 def _compute_threat(ip: str, bucket: Dict) -> Dict:
-    # Each alert contributes its rule score (capped at 100 overall).
     score = min(100, sum(r["score"] * r["count"] for r in bucket["rules"].values()))
     if score >= VERDICT_MALICIOUS:
         verdict = "malicious"
@@ -208,7 +208,6 @@ def _compute_threat(ip: str, bucket: Dict) -> Dict:
 def recompute_threats(db) -> int:
     by_ip = _aggregate_alerts_by_ip(db)
     if not by_ip:
-        # No alerts at all → drop stale threats so the dashboard isn't lying.
         try:
             db["threats"].delete_many({})
         except PyMongoError:

@@ -1,6 +1,4 @@
-/**
- * Format a number into a compact human-readable string.
- */
+// Format a number into a compact human-readable string (1.2K, 3.4M, 5.6B)
 export function formatNumber(n) {
   if (!Number.isFinite(n)) return n
   if (n >= 1_000_000_000) {
@@ -15,9 +13,7 @@ export function formatNumber(n) {
   return String(n)
 }
 
-/**
- * Filter logs by a named date range ('today', '7d', '30d', 'all').
- */
+// Filter logs by a named date range ('today', '7d', '30d', 'all')
 export function filterByDateRange(logs, dateRange) {
   if (dateRange === 'all') return logs
   const now = new Date()
@@ -35,9 +31,7 @@ export function filterByDateRange(logs, dateRange) {
   return logs.filter(l => l.date && l.date >= cutoffDate)
 }
 
-/**
- * Compute aggregate statistics from a logs array.
- */
+// Compute aggregate statistics from a logs array
 export function computeStats(logs) {
   const protocols = { ssh: 0, ftp: 0, http: 0, modbus: 0, mqtt: 0, telnet: 0 }
   const uniqueIPs = new Set()
@@ -57,9 +51,7 @@ export function computeStats(logs) {
   return { totalLogs: logs.length, uniqueIPs: uniqueIPs.size, protocols, cveLogs, successSSH, successFTP, successTelnet, modbusWrites }
 }
 
-/**
- * Compute event trend (%) comparing last 24h vs previous 24h window.
- */
+// Compute event trend (%) comparing last 24h vs previous 24h window
 export function computeTrend(allLogs, selectedAgent) {
   const now = new Date()
   const h24 = new Date(now - 86400_000)

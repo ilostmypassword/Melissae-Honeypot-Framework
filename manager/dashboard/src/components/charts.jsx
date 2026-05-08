@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
 import { formatNumber } from '../utils'
 
-// ─── Daily event count line chart ────────────────────────────────────────────
+// Daily event count line chart
 export function DailyChart({ logs, onDayClick }) {
   const { labels, data, fullDates } = useMemo(() => {
     const dayCounts = {}
@@ -66,7 +66,7 @@ export function DailyChart({ logs, onDayClick }) {
   )
 }
 
-// ─── Hourly activity bar chart ────────────────────────────────────────────────
+// Hourly activity bar chart
 export function ActivityChart({ logs, onHourClick }) {
   const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}h`)
   const data = useMemo(() => {
@@ -106,7 +106,7 @@ export function ActivityChart({ logs, onHourClick }) {
   )
 }
 
-// ─── Day × hour event heatmap ─────────────────────────────────────────────────
+// Day × hour event heatmap
 export function Heatmap({ logs }) {
   const grid = useMemo(() => {
     const data = Array.from({ length: 7 }, () => new Array(24).fill(0))
@@ -156,7 +156,7 @@ export function Heatmap({ logs }) {
   )
 }
 
-// ─── Protocol distribution doughnut ──────────────────────────────────────────
+// Protocol distribution doughnut
 export function ProtocolChart({ logs, onClick }) {
   const protocols = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
   const counts = useMemo(
@@ -185,7 +185,7 @@ export function ProtocolChart({ logs, onClick }) {
   )
 }
 
-// ─── Logs per agent bar chart ─────────────────────────────────────────────────
+// Logs per agent bar chart
 export function AgentBarChart({ logs, agentIds, onAgentClick }) {
   const counts = useMemo(
     () => agentIds.map(id => logs.filter(l => l.agent_id === id).length),
@@ -219,7 +219,7 @@ export function AgentBarChart({ logs, agentIds, onAgentClick }) {
   )
 }
 
-// ─── Top attacker IPs ranked by event count ───────────────────────────────────
+// Top attacker IPs ranked by event count
 export function TopAttackersList({ logs, geoData = {}, onIPClick, limit = 10 }) {
   const sorted = useMemo(() => {
     const ipCounts = logs.reduce((acc, l) => {
@@ -257,7 +257,7 @@ export function TopAttackersList({ logs, geoData = {}, onIPClick, limit = 10 }) 
   )
 }
 
-// ─── Top attempted credentials ────────────────────────────────────────────────
+// Top attempted credentials
 export function TopCredentials({ logs, limit = 10 }) {
   const creds = useMemo(() => {
     const counts = {}
@@ -288,7 +288,7 @@ export function TopCredentials({ logs, limit = 10 }) {
   )
 }
 
-// ─── Per-protocol daily activity (multi-line) ─────────────────────────────────
+// Per-protocol daily activity (multi-line)
 const _PROTO_LIST = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
 const _PROTO_COLORS = { ssh: '#38bdf8', ftp: '#f9a8d4', http: '#86efac', modbus: '#a78bfa', mqtt: '#fdba74', telnet: '#fda4af' }
 
@@ -350,8 +350,7 @@ export function ProtocolTimelineChart({ logs }) {
   )
 }
 
-// ─── Generic top-N ranked list for HTTP analytics ─────────────────────────────
-// fieldFn: (log) => string|null — extracts the value to rank from a log entry
+// Generic top-N ranked list (fieldFn extracts the value to rank from a log)
 export function TopHTTPTable({ logs, fieldFn, emptyLabel = 'data', accent = '#6366f1', onItemClick, limit = 10 }) {
   const sorted = useMemo(() => {
     const counts = {}
@@ -388,7 +387,7 @@ export function TopHTTPTable({ logs, fieldFn, emptyLabel = 'data', accent = '#63
   )
 }
 
-// ─── Internal helper ──────────────────────────────────────────────────────────
+// Internal helper
 function countryFlag(cc) {
   if (!cc || cc.length !== 2) return null
   const points = [...cc.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0))

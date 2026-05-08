@@ -1,59 +1,46 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const PROTOCOL_COLOR = {
-  ssh:    '#5b8db8',  // muted steel blue
-  http:   '#7aa886',  // muted sage green
-  ftp:    '#b08aa0',  // muted dusty pink
-  modbus: '#8a82b0',  // muted lavender
-  mqtt:   '#c0926a',  // muted amber
-  telnet: '#b08585',  // muted terracotta
+  ssh:    '#5b8db8',
+  http:   '#7aa886',
+  ftp:    '#b08aa0',
+  modbus: '#8a82b0',
+  mqtt:   '#c0926a',
+  telnet: '#b08585',
 }
 
-// SVG world dimensions — the viewBox the user pans/zooms inside.
 const CANVAS_W = 1600
 const CANVAS_H = 540
 
-// Node dimensions vary with depth (manager → agents → protocols).
 const NODE_DIMS = {
   manager: { w: 220, h: 54, rx: 12, font: 14 },
   agent:   { w: 180, h: 42, rx: 9,  font: 12 },
   module:  { w: 116, h: 30, rx: 7,  font: 11 },
 }
 
-// Persistence keys (versioned).
 const LS_POSITIONS = 'melissae:topology:positions:v3'
 
-// View / zoom controls.
 const ZOOM_MIN = 0.3
 const ZOOM_MAX = 3.0
 const ZOOM_STEP = 1.18
 
-// Force-directed simulation tuning.
 const SIM = {
-  springK: 0.022,             // parent-child spring stiffness
-  agentRest: 200,             // desired distance manager → agent
-  moduleRest: 130,            // desired distance agent → protocol
-  repelPad: 22,               // minimum gap between any two AABBs
-  repelStrength: 0.55,        // how aggressively we push apart on overlap
-  damping: 0.78,              // velocity decay each frame
-  depthGravity: 0.018,        // pull-down on lower-depth nodes
-  centerPullX: 0.0008,        // gentle pull toward canvas center X (manager only)
-  settleEpsilon: 0.04,        // total kinetic energy below which we consider settled
-  settleFrames: 45,           // consecutive settled frames before pausing the loop
-  maxStepDelta: 22,           // hard cap on per-frame displacement (anti-jitter)
+  springK: 0.022,
+  agentRest: 200,
+  moduleRest: 130,
+  repelPad: 22,
+  repelStrength: 0.55,
+  damping: 0.78,
+  depthGravity: 0.018,
+  centerPullX: 0.0008,
+  settleEpsilon: 0.04,
+  settleFrames: 45,
+  maxStepDelta: 22,
 }
 
-// Auto-fit padding around the bounding box of all nodes (in SVG units).
 const FIT_PADDING = 40
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
+// Map a module/container name to its protocol bucket
 function moduleProtocol(name) {
   const n = String(name || '').toLowerCase()
   if (n.includes('ssh'))    return 'ssh'
@@ -76,12 +63,12 @@ function truncate(str, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-// Aggregate the agent's modules into one entry per protocol.
+// Aggregate the agent's modules into one entry per protocol
 function agentProtocols(agent) {
   const map = new Map()
   for (const m of agent.last_health?.modules || []) {
     const proto = moduleProtocol(m.name)
-    if (proto === 'proxy') continue  // infrastructure, not an attack surface
+    if (proto === 'proxy') continue
     const isRunning = m.status === 'running'
     const entry = map.get(proto) || { protocol: proto, running: false, names: [] }
     entry.running = entry.running || isRunning
@@ -91,7 +78,7 @@ function agentProtocols(agent) {
   return [...map.values()].sort((a, b) => a.protocol.localeCompare(b.protocol))
 }
 
-// Vertical-leaning Bezier curve (used for connection paths).
+// Vertical-leaning Bezier curve used for connection paths
 function curvePath(p1, p2) {
   const dy = (p2.y - p1.y) / 2
   return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
@@ -110,7 +97,7 @@ function saveJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// Build the node graph: {id -> {kind, parent, dims, agentMeta}}
+// Build the node graph keyed by id
 function buildGraph(agents) {
   const graph = {
     'manager': { id: 'manager', kind: 'manager', parent: null, dims: NODE_DIMS.manager },
@@ -126,6 +113,7 @@ function buildGraph(agents) {
   return graph
 }
 
+// Initial layout seed: manager at top, agents in a centered grid, modules around them
 function seedPositions(graph) {
   const pos = {}
   const agentIds = Object.values(graph).filter(n => n.kind === 'agent').map(n => n.id)
@@ -144,7 +132,6 @@ function seedPositions(graph) {
   agentIds.forEach((aId, i) => {
     const row = Math.floor(i / cols)
     const col = i % cols
-    // Last row may be partial — center it under the rest.
     const isLastRow = row === rows - 1
     const lastRowCount = n - row * cols
     const offset = isLastRow && lastRowCount < cols
@@ -169,10 +156,7 @@ function seedPositions(graph) {
   return pos
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
+// Live attack topology with force-directed layout, pan/zoom and per-log flashes
 export default function AgentTopology({ agents = [], logs = [], onModuleClick }) {
   const svgRef = useRef(null)
 
@@ -183,13 +167,9 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 
   const graph = useMemo(() => buildGraph(visibleAgents), [visibleAgents])
 
-  // ---- Physics state (mutable, lives in a ref) --------------------------
-  // Each entry: { id, kind, parent, dims, x, y, vx, vy, fx, fy, pinned }
   const physRef = useRef({ nodes: {}, settledFrames: 0, running: false, rafId: null })
   const [, forceRender] = useReducer(x => x + 1, 0)
 
-  // Rebuild the simulation node set whenever the graph structure changes,
-  // preserving previously-known positions (from refs or localStorage).
   useEffect(() => {
     const stored = loadJSON(LS_POSITIONS, {})
     const seed = seedPositions(graph)
@@ -220,7 +200,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph])
 
-  // ---- View transform (pan / zoom) --------------------------------------
   const [view, setView] = useState({ tx: 0, ty: 0, s: 1 })
   const [autoFit, setAutoFit] = useState(true)
   const viewRef = useRef(view)
@@ -228,7 +207,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   const autoFitRef = useRef(autoFit)
   useEffect(() => { autoFitRef.current = autoFit }, [autoFit])
 
-  // ---- Simulation loop --------------------------------------------------
+  // Run the physics loop until the layout settles, then persist
   const kickSimulation = useCallback(() => {
     const phys = physRef.current
     if (phys.running) {
@@ -239,7 +218,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     phys.settledFrames = 0
     const tick = () => {
       const maxKE = stepPhysics(phys.nodes)
-      // Auto-fit if the user hasn't taken control.
       if (autoFitRef.current) {
         const next = computeFitView(phys.nodes)
         if (next) setView(next)
@@ -251,7 +229,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       if (phys.settledFrames >= SIM.settleFrames) {
         phys.running = false
         phys.rafId = null
-        // Persist once settled.
         const snapshot = {}
         for (const n of Object.values(phys.nodes)) snapshot[n.id] = { x: n.x, y: n.y }
         saveJSON(LS_POSITIONS, snapshot)
@@ -262,14 +239,12 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     phys.rafId = requestAnimationFrame(tick)
   }, [])
 
-  // Cleanup on unmount.
   useEffect(() => () => {
     const phys = physRef.current
     if (phys.rafId) cancelAnimationFrame(phys.rafId)
     phys.running = false
   }, [])
 
-  // ---- Interaction ------------------------------------------------------
   const dragRef = useRef(null)
   const [draggingId, setDraggingId] = useState(null)
   const [hoveringId, setHoveringId] = useState(null)
@@ -335,7 +310,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       drag.moved = true
       const node = physRef.current.nodes[drag.id]
       if (node) {
-        // No hard world boundaries — auto-fit will zoom to follow.
         node.x = world.x - drag.offX
         node.y = world.y - drag.offY
         node.vx = 0
@@ -384,7 +358,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     })
   }
 
-  // ---- Toolbar actions --------------------------------------------------
   const zoomBy = useCallback(factor => {
     setAutoFit(false)
     setView(v => {
@@ -416,7 +389,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     forceRender()
   }, [graph, kickSimulation])
 
-  // ---- Connections (recomputed every render — cheap with few nodes) -----
   const connections = useMemo(() => {
     const lines = { manager: [], modules: [] }
     const nodes = physRef.current.nodes
@@ -444,11 +416,9 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       }
     }
     return lines
-    // forceRender bumps on each tick; we depend on view to re-evaluate text positions if needed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph, view])
 
-  // ---- Live attack effects ----------------------------------------------
   const seenRef = useRef(null)
   const timersRef = useRef(new Set())
   const idCounterRef = useRef(0)
@@ -481,6 +451,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     timersRef.current.clear()
   }, [])
 
+  // Flash a module node and animate a packet along the agent→module link
   function triggerFlash(log) {
     const proto = String(log.protocol || '').toLowerCase()
     const nodeId = `mod:${log.agent_id}:${proto}`
@@ -504,7 +475,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     }
   }
 
-  // ---- Render ------------------------------------------------------------
   const cursor = isPanning ? 'grabbing' : draggingId ? 'grabbing' : 'grab'
   const nodes = physRef.current.nodes
 
@@ -629,20 +599,13 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   )
 }
 
-// ---------------------------------------------------------------------------
-// Physics
-// ---------------------------------------------------------------------------
-
-// Mutates every node's x/y/vx/vy in place. Returns an estimate of the maximum
-// per-node kinetic energy after this step, used to decide when to halt the loop.
+// Force-directed integration step; returns max per-node kinetic energy
 function stepPhysics(nodes) {
   const list = Object.values(nodes)
   if (list.length === 0) return 0
 
-  // Reset forces.
   for (const n of list) { n.fx = 0; n.fy = 0 }
 
-  // Spring forces: each child is pulled toward its parent at a rest distance.
   for (const n of list) {
     if (!n.parent) continue
     const p = nodes[n.parent]
@@ -656,23 +619,20 @@ function stepPhysics(nodes) {
     const uy = dy / dist
     n.fx -= ux * force
     n.fy -= uy * force
-    p.fx += ux * force * 0.3   // parent absorbs a fraction (lighter pull)
+    p.fx += ux * force * 0.3
     p.fy += uy * force * 0.3
 
-    // Encourage children to live below their parent (tree-like Y-ordering).
     if (n.y < p.y + rest * 0.35) {
       n.fy += SIM.depthGravity * (p.y + rest * 0.35 - n.y)
     }
   }
 
-  // Manager is gently pulled to the horizontal center.
   const mgr = nodes['manager']
   if (mgr) {
     mgr.fx += (CANVAS_W / 2 - mgr.x) * SIM.centerPullX
     mgr.fy += (80 - mgr.y) * SIM.centerPullX * 4
   }
 
-  // Pairwise AABB repulsion — guarantees nodes never overlap.
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j]
@@ -683,7 +643,6 @@ function stepPhysics(nodes) {
       const overlapX = minDX - Math.abs(dx)
       const overlapY = minDY - Math.abs(dy)
       if (overlapX > 0 && overlapY > 0) {
-        // Push along the smaller-overlap axis (cheapest separation).
         if (overlapX < overlapY) {
           const push = overlapX * SIM.repelStrength
           const sign = dx === 0 ? (a.id < b.id ? 1 : -1) : (dx > 0 ? 1 : -1)
@@ -699,7 +658,6 @@ function stepPhysics(nodes) {
     }
   }
 
-  // Integrate forces → velocities → positions.
   let maxKE = 0
   for (const n of list) {
     if (n.pinned) {
@@ -708,7 +666,6 @@ function stepPhysics(nodes) {
     }
     n.vx = (n.vx + n.fx) * SIM.damping
     n.vy = (n.vy + n.fy) * SIM.damping
-    // Anti-jitter clamp on per-frame displacement.
     if (n.vx > SIM.maxStepDelta) n.vx = SIM.maxStepDelta
     else if (n.vx < -SIM.maxStepDelta) n.vx = -SIM.maxStepDelta
     if (n.vy > SIM.maxStepDelta) n.vy = SIM.maxStepDelta
@@ -717,8 +674,6 @@ function stepPhysics(nodes) {
     n.x += n.vx
     n.y += n.vy
 
-    // No fixed world bounds: auto-fit handles visibility, even for dozens
-    // of agents. We only catch pathological NaN drifts.
     if (!Number.isFinite(n.x)) n.x = CANVAS_W / 2
     if (!Number.isFinite(n.y)) n.y = CANVAS_H / 2
 
@@ -728,7 +683,7 @@ function stepPhysics(nodes) {
   return maxKE
 }
 
-// Compute a {tx, ty, s} that fits all nodes (with padding) inside the canvas.
+// Compute a {tx, ty, s} that fits all nodes inside the canvas with padding
 function computeFitView(nodes) {
   const list = Object.values(nodes)
   if (list.length === 0) return null
@@ -749,10 +704,6 @@ function computeFitView(nodes) {
   const ty = CANVAS_H / 2 - cy * s
   return { tx, ty, s }
 }
-
-// ---------------------------------------------------------------------------
-// Node components
-// ---------------------------------------------------------------------------
 
 function ToolbarBtn({ label, title, onClick }) {
   return (
