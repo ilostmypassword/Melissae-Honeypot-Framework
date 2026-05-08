@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const PROTOCOL_COLOR = {
   ssh:    '#38bdf8',
@@ -13,16 +17,38 @@ const PROTOCOL_COLOR = {
 const CANVAS_W = 1600
 const CANVAS_H = 540
 
-// Node shapes (SVG units).
-const NODE = {
-  manager: { w: 180, h: 44, rx: 10 },
-  agent:   { w: 180, h: 38, rx: 8 },
-  module:  { w: 150, h: 30, rx: 6 },
+// Node dimensions vary with depth (manager → agents → protocols).
+const NODE_DIMS = {
+  manager: { w: 220, h: 54, rx: 12, font: 14 },
+  agent:   { w: 180, h: 42, rx: 9,  font: 12 },
+  module:  { w: 116, h: 30, rx: 7,  font: 11 },
 }
 
-const ZOOM_MIN = 0.35
-const ZOOM_MAX = 2.5
+// Persistence keys (versioned).
+const LS_POSITIONS = 'melissae:topology:positions:v3'
+
+// View / zoom controls.
+const ZOOM_MIN = 0.3
+const ZOOM_MAX = 3.0
 const ZOOM_STEP = 1.18
+
+// Force-directed simulation tuning.
+const SIM = {
+  springK: 0.022,             // parent-child spring stiffness
+  agentRest: 200,             // desired distance manager → agent
+  moduleRest: 130,            // desired distance agent → protocol
+  repelPad: 22,               // minimum gap between any two AABBs
+  repelStrength: 0.55,        // how aggressively we push apart on overlap
+  damping: 0.78,              // velocity decay each frame
+  depthGravity: 0.018,        // pull-down on lower-depth nodes
+  centerPullX: 0.0008,        // gentle pull toward canvas center X (manager only)
+  settleEpsilon: 0.04,        // total kinetic energy below which we consider settled
+  settleFrames: 45,           // consecutive settled frames before pausing the loop
+  maxStepDelta: 22,           // hard cap on per-frame displacement (anti-jitter)
+}
+
+// Auto-fit padding around the bounding box of all nodes (in SVG units).
+const FIT_PADDING = 40
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,63 +69,33 @@ function logSig(l) {
   return `${l.agent_id || ''}|${l.protocol || ''}|${l.timestamp || ''}|${l.date || ''}|${l.hour || ''}|${l.ip || ''}|${l.action || ''}|${l.path || ''}`
 }
 
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v))
-}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
 function truncate(str, n) {
   const s = String(str || '')
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-// Aggregate raw module list into one entry per protocol.
+// Aggregate the agent's modules into one entry per protocol.
 function agentProtocols(agent) {
   const map = new Map()
   for (const m of agent.last_health?.modules || []) {
     const proto = moduleProtocol(m.name)
-    if (proto === 'proxy') continue  
+    if (proto === 'proxy') continue  // infrastructure, not an attack surface
     const isRunning = m.status === 'running'
     const entry = map.get(proto) || { protocol: proto, running: false, names: [] }
     entry.running = entry.running || isRunning
     entry.names.push(m.name)
     map.set(proto, entry)
   }
-  // Stable ordering for layout determinism.
   return [...map.values()].sort((a, b) => a.protocol.localeCompare(b.protocol))
 }
 
-function buildDefaultLayout(agents) {
-  const pos = {}
-  pos['manager'] = { x: CANVAS_W / 2, y: 60 }
-  const n = Math.max(1, agents.length)
-  const agentY = 210
-  // Protocols fan out around each agent on a circular arc, like tree branches.
-  const radius = 140
-  const maxSpread = (110 * Math.PI) / 180  // total angular spread, capped at 110°
-  agents.forEach((a, i) => {
-    const x = (CANVAS_W * (i + 1)) / (n + 1)
-    pos[`agent:${a.agent_id}`] = { x, y: agentY }
-
-    const protos = agentProtocols(a)
-    const k = protos.length
-    if (k === 0) return
-    // Tighten the spread for few branches so they stay close to the parent.
-    const spread = k === 1 ? 0 : Math.min(maxSpread, (k - 1) * (28 * Math.PI / 180))
-    protos.forEach((p, j) => {
-      const t = k === 1 ? 0 : j / (k - 1) - 0.5  // -0.5 … +0.5
-      const angle = t * spread  // 0 = straight down
-      const px = x + Math.sin(angle) * radius
-      const py = agentY + Math.cos(angle) * radius + 30
-      pos[`mod:${a.agent_id}:${p.protocol}`] = { x: px, y: py }
-    })
-  })
-  return pos
+// Vertical-leaning Bezier curve (used for connection paths).
+function curvePath(p1, p2) {
+  const dy = (p2.y - p1.y) / 2
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
 }
-
-// ---- Persistence -----------------------------------------------------------
-
-const LS_POSITIONS = 'melissae:topology:positions:v2'
-const LS_VIEW = 'melissae:topology:view:v2'
 
 function loadJSON(key, fallback) {
   try {
@@ -107,19 +103,52 @@ function loadJSON(key, fallback) {
     if (!raw) return fallback
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? parsed : fallback
-  } catch {
-    return fallback
-  }
+  } catch { return fallback }
 }
 
 function saveJSON(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* quota / disabled */ }
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// Vertical-leaning Bezier curve.
-function curvePath(p1, p2) {
-  const dy = (p2.y - p1.y) / 2
-  return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
+// Build the node graph: {id -> {kind, parent, dims, agentMeta}}
+function buildGraph(agents) {
+  const graph = {
+    'manager': { id: 'manager', kind: 'manager', parent: null, dims: NODE_DIMS.manager },
+  }
+  agents.forEach(a => {
+    const aId = `agent:${a.agent_id}`
+    graph[aId] = { id: aId, kind: 'agent', parent: 'manager', dims: NODE_DIMS.agent, agent: a }
+    agentProtocols(a).forEach(p => {
+      const mId = `mod:${a.agent_id}:${p.protocol}`
+      graph[mId] = { id: mId, kind: 'module', parent: aId, dims: NODE_DIMS.module, agentId: a.agent_id, proto: p }
+    })
+  })
+  return graph
+}
+
+// Default initial positions: manager top center; agents spread; protocols fan
+// out radially under their parent agent. The simulation then refines.
+function seedPositions(graph) {
+  const pos = {}
+  const agentIds = Object.values(graph).filter(n => n.kind === 'agent').map(n => n.id)
+  const n = Math.max(1, agentIds.length)
+  pos['manager'] = { x: CANVAS_W / 2, y: 70 }
+  agentIds.forEach((aId, i) => {
+    const x = (CANVAS_W * (i + 1)) / (n + 1)
+    pos[aId] = { x, y: 230 }
+    const children = Object.values(graph).filter(c => c.parent === aId)
+    const k = children.length
+    const spread = Math.min(110, (k - 1) * 30) * Math.PI / 180
+    children.forEach((c, j) => {
+      const t = k <= 1 ? 0 : j / (k - 1) - 0.5
+      const angle = t * spread
+      pos[c.id] = {
+        x: x + Math.sin(angle) * 130,
+        y: 230 + Math.cos(angle) * 130 + 30,
+      }
+    })
+  })
+  return pos
 }
 
 // ---------------------------------------------------------------------------
@@ -134,37 +163,95 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     [agents]
   )
 
-  // ---- Node positions (persisted across re-renders / sessions) -----------
-  const [positions, setPositions] = useState(() => {
-    const stored = loadJSON(LS_POSITIONS, {})
-    return { ...buildDefaultLayout(visibleAgents), ...stored }
-  })
+  const graph = useMemo(() => buildGraph(visibleAgents), [visibleAgents])
 
+  // ---- Physics state (mutable, lives in a ref) --------------------------
+  // Each entry: { id, kind, parent, dims, x, y, vx, vy, fx, fy, pinned }
+  const physRef = useRef({ nodes: {}, settledFrames: 0, running: false, rafId: null })
+  const [, forceRender] = useReducer(x => x + 1, 0)
+
+  // Rebuild the simulation node set whenever the graph structure changes,
+  // preserving previously-known positions (from refs or localStorage).
   useEffect(() => {
-    setPositions(prev => {
-      const desired = buildDefaultLayout(visibleAgents)
-      const next = {}
-      for (const id of Object.keys(desired)) {
-        next[id] = prev[id] || desired[id]
+    const stored = loadJSON(LS_POSITIONS, {})
+    const seed = seedPositions(graph)
+    const prevNodes = physRef.current.nodes
+    const nextNodes = {}
+    for (const id of Object.keys(graph)) {
+      const meta = graph[id]
+      const prev = prevNodes[id]
+      const start = prev || stored[id] || seed[id] || { x: CANVAS_W / 2, y: CANVAS_H / 2 }
+      nextNodes[id] = {
+        id,
+        kind: meta.kind,
+        parent: meta.parent,
+        dims: meta.dims,
+        x: start.x,
+        y: start.y,
+        vx: prev?.vx || 0,
+        vy: prev?.vy || 0,
+        fx: 0,
+        fy: 0,
+        pinned: prev?.pinned || false,
       }
-      return next
-    })
-  }, [visibleAgents])
-
-  // Persist position changes (debounced via rAF batching from React).
-  useEffect(() => { saveJSON(LS_POSITIONS, positions) }, [positions])
-
-  // ---- View transform (pan / zoom), persisted ---------------------------
-  const [view, setView] = useState(() => {
-    const v = loadJSON(LS_VIEW, null)
-    if (v && Number.isFinite(v.tx) && Number.isFinite(v.ty) && Number.isFinite(v.s)) {
-      return { tx: v.tx, ty: v.ty, s: clamp(v.s, ZOOM_MIN, ZOOM_MAX) }
     }
-    return { tx: 0, ty: 0, s: 1 }
-  })
-  useEffect(() => { saveJSON(LS_VIEW, view) }, [view])
+    physRef.current.nodes = nextNodes
+    physRef.current.settledFrames = 0
+    kickSimulation()
+    forceRender()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph])
 
-  // ---- Interaction state ------------------------------------------------
+  // ---- View transform (pan / zoom) --------------------------------------
+  const [view, setView] = useState({ tx: 0, ty: 0, s: 1 })
+  const [autoFit, setAutoFit] = useState(true)
+  const viewRef = useRef(view)
+  useEffect(() => { viewRef.current = view }, [view])
+  const autoFitRef = useRef(autoFit)
+  useEffect(() => { autoFitRef.current = autoFit }, [autoFit])
+
+  // ---- Simulation loop --------------------------------------------------
+  const kickSimulation = useCallback(() => {
+    const phys = physRef.current
+    if (phys.running) {
+      phys.settledFrames = 0
+      return
+    }
+    phys.running = true
+    phys.settledFrames = 0
+    const tick = () => {
+      const maxKE = stepPhysics(phys.nodes)
+      // Auto-fit if the user hasn't taken control.
+      if (autoFitRef.current) {
+        const next = computeFitView(phys.nodes)
+        if (next) setView(next)
+      }
+      forceRender()
+      if (maxKE < SIM.settleEpsilon) phys.settledFrames++
+      else phys.settledFrames = 0
+
+      if (phys.settledFrames >= SIM.settleFrames) {
+        phys.running = false
+        phys.rafId = null
+        // Persist once settled.
+        const snapshot = {}
+        for (const n of Object.values(phys.nodes)) snapshot[n.id] = { x: n.x, y: n.y }
+        saveJSON(LS_POSITIONS, snapshot)
+        return
+      }
+      phys.rafId = requestAnimationFrame(tick)
+    }
+    phys.rafId = requestAnimationFrame(tick)
+  }, [])
+
+  // Cleanup on unmount.
+  useEffect(() => () => {
+    const phys = physRef.current
+    if (phys.rafId) cancelAnimationFrame(phys.rafId)
+    phys.running = false
+  }, [])
+
+  // ---- Interaction ------------------------------------------------------
   const dragRef = useRef(null)
   const [draggingId, setDraggingId] = useState(null)
   const [hoveringId, setHoveringId] = useState(null)
@@ -181,25 +268,27 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   }, [])
 
   const svgToWorld = useCallback((sx, sy) => ({
-    x: (sx - view.tx) / view.s,
-    y: (sy - view.ty) / view.s,
-  }), [view])
+    x: (sx - viewRef.current.tx) / viewRef.current.s,
+    y: (sy - viewRef.current.ty) / viewRef.current.s,
+  }), [])
 
-  // ---- Pointer handlers -------------------------------------------------
   const onPointerDownNode = (e, id) => {
     e.stopPropagation()
     if (e.button !== undefined && e.button !== 0) return
+    const node = physRef.current.nodes[id]
+    if (!node) return
     const svgPt = screenToSvg(e.clientX, e.clientY)
     const world = svgToWorld(svgPt.x, svgPt.y)
-    const cur = positions[id]
-    if (!cur) return
     dragRef.current = {
       kind: 'node',
       id,
       moved: false,
-      offX: world.x - cur.x,
-      offY: world.y - cur.y,
+      offX: world.x - node.x,
+      offY: world.y - node.y,
     }
+    node.pinned = true
+    node.vx = 0
+    node.vy = 0
     setDraggingId(id)
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
@@ -214,6 +303,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       origTy: view.ty,
     }
     setIsPanning(true)
+    setAutoFit(false)
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
 
@@ -225,13 +315,14 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       const svgPt = screenToSvg(e.clientX, e.clientY)
       const world = svgToWorld(svgPt.x, svgPt.y)
       drag.moved = true
-      setPositions(prev => ({
-        ...prev,
-        [drag.id]: {
-          x: clamp(world.x - drag.offX, 0, CANVAS_W),
-          y: clamp(world.y - drag.offY, 0, CANVAS_H),
-        },
-      }))
+      const node = physRef.current.nodes[drag.id]
+      if (node) {
+        node.x = clamp(world.x - drag.offX, node.dims.w / 2, CANVAS_W - node.dims.w / 2)
+        node.y = clamp(world.y - drag.offY, node.dims.h / 2, CANVAS_H - node.dims.h / 2)
+        node.vx = 0
+        node.vy = 0
+      }
+      kickSimulation()
     } else if (drag.kind === 'pan') {
       const svg = svgRef.current
       if (!svg) return
@@ -249,18 +340,21 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     setIsPanning(false)
     e.currentTarget.releasePointerCapture?.(e.pointerId)
 
-    // Click (no drag) on a module node → invoke parent callback.
-    if (drag && drag.kind === 'node' && !drag.moved) {
-      const id = drag.id
-      if (id.startsWith('mod:')) {
-        const [, agentId, proto] = id.split(':')
-        if (onModuleClick) onModuleClick(proto, agentId)
+    if (drag && drag.kind === 'node') {
+      if (!drag.moved && drag.id.startsWith('mod:')) {
+        const node = physRef.current.nodes[drag.id]
+        if (node) {
+          const [, agentId, proto] = drag.id.split(':')
+          if (onModuleClick) onModuleClick(proto, agentId)
+        }
       }
+      kickSimulation()
     }
   }
 
   const onWheel = e => {
     e.preventDefault()
+    setAutoFit(false)
     const svgPt = screenToSvg(e.clientX, e.clientY)
     setView(v => {
       const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
@@ -273,6 +367,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 
   // ---- Toolbar actions --------------------------------------------------
   const zoomBy = useCallback(factor => {
+    setAutoFit(false)
     setView(v => {
       const newS = clamp(v.s * factor, ZOOM_MIN, ZOOM_MAX)
       const cx = CANVAS_W / 2
@@ -283,51 +378,58 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     })
   }, [])
 
-  const resetView = useCallback(() => {
-    setView({ tx: 0, ty: 0, s: 1 })
+  const fitNow = useCallback(() => {
+    setAutoFit(true)
+    const next = computeFitView(physRef.current.nodes)
+    if (next) setView(next)
   }, [])
 
   const resetLayout = useCallback(() => {
-    const fresh = buildDefaultLayout(visibleAgents)
-    setPositions(fresh)
-    setView({ tx: 0, ty: 0, s: 1 })
-    try {
-      localStorage.removeItem(LS_POSITIONS)
-      localStorage.removeItem(LS_VIEW)
-    } catch { /* ignore */ }
-  }, [visibleAgents])
+    const seed = seedPositions(graph)
+    for (const id of Object.keys(physRef.current.nodes)) {
+      const n = physRef.current.nodes[id]
+      const s = seed[id]
+      if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; n.pinned = false }
+    }
+    try { localStorage.removeItem(LS_POSITIONS) } catch { /* ignore */ }
+    setAutoFit(true)
+    kickSimulation()
+    forceRender()
+  }, [graph, kickSimulation])
 
-  // ---- Connections -------------------------------------------------------
+  // ---- Connections (recomputed every render — cheap with few nodes) -----
   const connections = useMemo(() => {
     const lines = { manager: [], modules: [] }
-    const mPos = positions['manager']
-    if (!mPos) return lines
-    const mBottom = { x: mPos.x, y: mPos.y + NODE.manager.h / 2 }
+    const nodes = physRef.current.nodes
+    const m = nodes['manager']
+    if (!m) return lines
+    const mBottom = { x: m.x, y: m.y + m.dims.h / 2 }
 
-    visibleAgents.forEach(a => {
-      const aPos = positions[`agent:${a.agent_id}`]
-      if (!aPos) return
-      const aTop = { x: aPos.x, y: aPos.y - NODE.agent.h / 2 }
-      const aBot = { x: aPos.x, y: aPos.y + NODE.agent.h / 2 }
-      lines.manager.push({ id: `link-m-${a.agent_id}`, d: curvePath(mBottom, aTop) })
-
-      agentProtocols(a).forEach(p => {
-        const id = `mod:${a.agent_id}:${p.protocol}`
-        const modPos = positions[id]
-        if (!modPos) return
-        const modTop = { x: modPos.x, y: modPos.y - NODE.module.h / 2 }
+    for (const node of Object.values(nodes)) {
+      if (node.kind === 'agent') {
+        const aTop = { x: node.x, y: node.y - node.dims.h / 2 }
+        lines.manager.push({ id: `link-m-${node.id}`, d: curvePath(mBottom, aTop) })
+      } else if (node.kind === 'module') {
+        const parent = nodes[node.parent]
+        if (!parent) continue
+        const aBot = { x: parent.x, y: parent.y + parent.dims.h / 2 }
+        const modTop = { x: node.x, y: node.y - node.dims.h / 2 }
+        const proto = node.id.split(':')[2]
+        const agentId = node.id.split(':')[1]
         lines.modules.push({
-          id: `link-${id}`,
-          key: `${a.agent_id}:${p.protocol}`,
-          color: PROTOCOL_COLOR[p.protocol] || '#30363d',
+          id: `link-${node.id}`,
+          key: `${agentId}:${proto}`,
+          color: PROTOCOL_COLOR[proto] || '#30363d',
           d: curvePath(aBot, modTop),
         })
-      })
-    })
+      }
+    }
     return lines
-  }, [visibleAgents, positions])
+    // forceRender bumps on each tick; we depend on view to re-evaluate text positions if needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, view])
 
-  // ---- Live attack effects (flashes + packets) --------------------------
+  // ---- Live attack effects ----------------------------------------------
   const seenRef = useRef(null)
   const timersRef = useRef(new Set())
   const idCounterRef = useRef(0)
@@ -338,10 +440,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 
   useEffect(() => {
     const sigs = new Set(logs.map(logSig))
-    if (seenRef.current === null) {
-      seenRef.current = sigs
-      return
-    }
+    if (seenRef.current === null) { seenRef.current = sigs; return }
     const newLogs = logs.filter(l => !seenRef.current.has(logSig(l)))
     seenRef.current = sigs
     if (newLogs.length === 0) return
@@ -349,7 +448,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     newLogs.sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))
     const SPREAD = Math.min(15000, Math.max(1000, newLogs.length * 250))
     const step = SPREAD / newLogs.length
-
     newLogs.forEach((log, i) => {
       const t = setTimeout(() => {
         timersRef.current.delete(t)
@@ -389,6 +487,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 
   // ---- Render ------------------------------------------------------------
   const cursor = isPanning ? 'grabbing' : draggingId ? 'grabbing' : 'grab'
+  const nodes = physRef.current.nodes
 
   return (
     <div className="glass-card p-5">
@@ -403,10 +502,11 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-text-muted mr-1">
             {visibleAgents.length} agent{visibleAgents.length !== 1 ? 's' : ''} · {Math.round(view.s * 100)}%
+            {autoFit && <span className="ml-1 text-accent">· auto</span>}
           </span>
           <ToolbarBtn label="−" title="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)} />
           <ToolbarBtn label="+" title="Zoom in" onClick={() => zoomBy(ZOOM_STEP)} />
-          <ToolbarBtn label="Fit" title="Reset view" onClick={resetView} />
+          <ToolbarBtn label="Fit" title="Fit all nodes (re-enable auto-fit)" onClick={fitNow} />
           <ToolbarBtn label="Auto" title="Re-arrange nodes" onClick={resetLayout} />
         </div>
       </div>
@@ -443,15 +543,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                 <path key={p.id} d={p.d} stroke="#30363d" strokeWidth="1.4" fill="none" />
               ))}
               {connections.modules.map(p => (
-                <path
-                  key={p.id}
-                  d={p.d}
-                  stroke={p.color}
-                  strokeOpacity="0.55"
-                  strokeWidth="1.2"
-                  fill="none"
-                  strokeDasharray="4 4"
-                />
+                <path key={p.id} d={p.d} stroke={p.color} strokeOpacity="0.55" strokeWidth="1.2" fill="none" strokeDasharray="4 4" />
               ))}
 
               {/* Packets */}
@@ -467,56 +559,35 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                 </g>
               ))}
 
-              {/* Manager node */}
-              {positions['manager'] && (
-                <ManagerNode
-                  pos={positions['manager']}
-                  hovered={hoveringId === 'manager'}
-                  dragging={draggingId === 'manager'}
-                  onPointerDown={e => onPointerDownNode(e, 'manager')}
-                  onMouseEnter={() => setHoveringId('manager')}
-                  onMouseLeave={() => setHoveringId(null)}
-                />
-              )}
-
-              {/* Agents + their protocols */}
-              {visibleAgents.map(a => {
-                const aId = `agent:${a.agent_id}`
-                const aPos = positions[aId]
-                if (!aPos) return null
-                const protos = agentProtocols(a)
+              {/* Nodes */}
+              {Object.values(nodes).map(node => {
+                const common = {
+                  pos: { x: node.x, y: node.y },
+                  dims: node.dims,
+                  hovered: hoveringId === node.id,
+                  dragging: draggingId === node.id,
+                  pinned: node.pinned && draggingId !== node.id,
+                  onPointerDown: e => onPointerDownNode(e, node.id),
+                  onMouseEnter: () => setHoveringId(node.id),
+                  onMouseLeave: () => setHoveringId(null),
+                }
+                if (node.kind === 'manager') return <ManagerNode key={node.id} {...common} />
+                if (node.kind === 'agent') {
+                  const a = graph[node.id]?.agent
+                  return a ? <AgentNode key={node.id} agent={a} {...common} /> : null
+                }
+                const meta = graph[node.id]
+                if (!meta) return null
+                const flashing = flashes.some(f => f.nodeId === node.id)
+                const a = visibleAgents.find(x => x.agent_id === meta.agentId)
                 return (
-                  <g key={a.agent_id}>
-                    <AgentNode
-                      agent={a}
-                      pos={aPos}
-                      hovered={hoveringId === aId}
-                      dragging={draggingId === aId}
-                      onPointerDown={e => onPointerDownNode(e, aId)}
-                      onMouseEnter={() => setHoveringId(aId)}
-                      onMouseLeave={() => setHoveringId(null)}
-                    />
-                    {protos.map(p => {
-                      const mId = `mod:${a.agent_id}:${p.protocol}`
-                      const mPos = positions[mId]
-                      if (!mPos) return null
-                      const flashing = flashes.some(f => f.nodeId === mId)
-                      return (
-                        <ProtocolNode
-                          key={mId}
-                          proto={p}
-                          pos={mPos}
-                          unreachable={a.status === 'unreachable'}
-                          hovered={hoveringId === mId}
-                          dragging={draggingId === mId}
-                          flashing={flashing}
-                          onPointerDown={e => onPointerDownNode(e, mId)}
-                          onMouseEnter={() => setHoveringId(mId)}
-                          onMouseLeave={() => setHoveringId(null)}
-                        />
-                      )
-                    })}
-                  </g>
+                  <ProtocolNode
+                    key={node.id}
+                    proto={meta.proto}
+                    flashing={flashing}
+                    unreachable={a?.status === 'unreachable'}
+                    {...common}
+                  />
                 )
               })}
             </g>
@@ -525,17 +596,13 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
           {/* Legend */}
           <div className="absolute bottom-2 left-2 flex flex-wrap gap-1.5 text-[10px] font-mono pointer-events-none">
             {Object.entries(PROTOCOL_COLOR).map(([p, c]) => (
-              <span
-                key={p}
-                className="px-1.5 py-0.5 rounded bg-surface-secondary/80 border border-border/50"
-                style={{ color: c }}
-              >
+              <span key={p} className="px-1.5 py-0.5 rounded bg-surface-secondary/80 border border-border/50" style={{ color: c }}>
                 {p}
               </span>
             ))}
           </div>
           <div className="absolute bottom-2 right-2 text-[10px] font-mono text-text-muted pointer-events-none">
-            drag · wheel zoom · click module
+            drag · wheel zoom · click protocol
           </div>
         </div>
       )}
@@ -544,7 +611,127 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 }
 
 // ---------------------------------------------------------------------------
-// SVG node components
+// Physics
+// ---------------------------------------------------------------------------
+
+// Mutates every node's x/y/vx/vy in place. Returns an estimate of the maximum
+// per-node kinetic energy after this step, used to decide when to halt the loop.
+function stepPhysics(nodes) {
+  const list = Object.values(nodes)
+  if (list.length === 0) return 0
+
+  // Reset forces.
+  for (const n of list) { n.fx = 0; n.fy = 0 }
+
+  // Spring forces: each child is pulled toward its parent at a rest distance.
+  for (const n of list) {
+    if (!n.parent) continue
+    const p = nodes[n.parent]
+    if (!p) continue
+    const dx = n.x - p.x
+    const dy = n.y - p.y
+    const dist = Math.hypot(dx, dy) || 0.0001
+    const rest = n.kind === 'agent' ? SIM.agentRest : SIM.moduleRest
+    const force = SIM.springK * (dist - rest)
+    const ux = dx / dist
+    const uy = dy / dist
+    n.fx -= ux * force
+    n.fy -= uy * force
+    p.fx += ux * force * 0.3   // parent absorbs a fraction (lighter pull)
+    p.fy += uy * force * 0.3
+
+    // Encourage children to live below their parent (tree-like Y-ordering).
+    if (n.y < p.y + rest * 0.35) {
+      n.fy += SIM.depthGravity * (p.y + rest * 0.35 - n.y)
+    }
+  }
+
+  // Manager is gently pulled to the horizontal center.
+  const mgr = nodes['manager']
+  if (mgr) {
+    mgr.fx += (CANVAS_W / 2 - mgr.x) * SIM.centerPullX
+    mgr.fy += (80 - mgr.y) * SIM.centerPullX * 4
+  }
+
+  // Pairwise AABB repulsion — guarantees nodes never overlap.
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j]
+      const minDX = (a.dims.w + b.dims.w) / 2 + SIM.repelPad
+      const minDY = (a.dims.h + b.dims.h) / 2 + SIM.repelPad
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const overlapX = minDX - Math.abs(dx)
+      const overlapY = minDY - Math.abs(dy)
+      if (overlapX > 0 && overlapY > 0) {
+        // Push along the smaller-overlap axis (cheapest separation).
+        if (overlapX < overlapY) {
+          const push = overlapX * SIM.repelStrength
+          const sign = dx === 0 ? (a.id < b.id ? 1 : -1) : (dx > 0 ? 1 : -1)
+          a.fx -= push * sign
+          b.fx += push * sign
+        } else {
+          const push = overlapY * SIM.repelStrength
+          const sign = dy === 0 ? (a.id < b.id ? 1 : -1) : (dy > 0 ? 1 : -1)
+          a.fy -= push * sign
+          b.fy += push * sign
+        }
+      }
+    }
+  }
+
+  // Integrate forces → velocities → positions.
+  let maxKE = 0
+  for (const n of list) {
+    if (n.pinned) {
+      n.vx = 0; n.vy = 0
+      continue
+    }
+    n.vx = (n.vx + n.fx) * SIM.damping
+    n.vy = (n.vy + n.fy) * SIM.damping
+    // Anti-jitter clamp on per-frame displacement.
+    if (n.vx > SIM.maxStepDelta) n.vx = SIM.maxStepDelta
+    else if (n.vx < -SIM.maxStepDelta) n.vx = -SIM.maxStepDelta
+    if (n.vy > SIM.maxStepDelta) n.vy = SIM.maxStepDelta
+    else if (n.vy < -SIM.maxStepDelta) n.vy = -SIM.maxStepDelta
+
+    n.x += n.vx
+    n.y += n.vy
+
+    // Keep within world bounds (taking node dims into account).
+    n.x = clamp(n.x, n.dims.w / 2, CANVAS_W - n.dims.w / 2)
+    n.y = clamp(n.y, n.dims.h / 2, CANVAS_H - n.dims.h / 2)
+
+    const ke = Math.abs(n.vx) + Math.abs(n.vy)
+    if (ke > maxKE) maxKE = ke
+  }
+  return maxKE
+}
+
+// Compute a {tx, ty, s} that fits all nodes (with padding) inside the canvas.
+function computeFitView(nodes) {
+  const list = Object.values(nodes)
+  if (list.length === 0) return null
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const n of list) {
+    minX = Math.min(minX, n.x - n.dims.w / 2)
+    minY = Math.min(minY, n.y - n.dims.h / 2)
+    maxX = Math.max(maxX, n.x + n.dims.w / 2)
+    maxY = Math.max(maxY, n.y + n.dims.h / 2)
+  }
+  const bboxW = (maxX - minX) + FIT_PADDING * 2
+  const bboxH = (maxY - minY) + FIT_PADDING * 2
+  if (bboxW <= 0 || bboxH <= 0) return null
+  const s = clamp(Math.min(CANVAS_W / bboxW, CANVAS_H / bboxH), ZOOM_MIN, ZOOM_MAX)
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const tx = CANVAS_W / 2 - cx * s
+  const ty = CANVAS_H / 2 - cy * s
+  return { tx, ty, s }
+}
+
+// ---------------------------------------------------------------------------
+// Node components
 // ---------------------------------------------------------------------------
 
 function ToolbarBtn({ label, title, onClick }) {
@@ -560,8 +747,8 @@ function ToolbarBtn({ label, title, onClick }) {
   )
 }
 
-function ManagerNode({ pos, hovered, dragging, onPointerDown, onMouseEnter, onMouseLeave }) {
-  const { w, h, rx } = NODE.manager
+function ManagerNode({ pos, dims, hovered, dragging, pinned, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx, font } = dims
   return (
     <g
       transform={`translate(${pos.x - w / 2} ${pos.y - h / 2})`}
@@ -572,15 +759,16 @@ function ManagerNode({ pos, hovered, dragging, onPointerDown, onMouseEnter, onMo
     >
       <rect
         width={w} height={h} rx={rx} ry={rx}
-        fill="rgba(99,102,241,0.12)"
-        stroke="rgba(129,140,248,0.6)"
-        strokeWidth={hovered || dragging ? 2 : 1.4}
+        fill="rgba(99,102,241,0.14)"
+        stroke="rgba(129,140,248,0.7)"
+        strokeWidth={hovered || dragging ? 2.4 : 1.6}
       />
+      {pinned && <PinIndicator x={w - 10} y={10} />}
       <text
         x={w / 2} y={h / 2 + 4}
         textAnchor="middle"
-        fontSize="13"
-        fontWeight="700"
+        fontSize={font}
+        fontWeight="800"
         letterSpacing="3"
         fill="#a5b4fc"
         style={{ pointerEvents: 'none' }}
@@ -591,8 +779,8 @@ function ManagerNode({ pos, hovered, dragging, onPointerDown, onMouseEnter, onMo
   )
 }
 
-function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter, onMouseLeave }) {
-  const { w, h, rx } = NODE.agent
+function AgentNode({ agent, pos, dims, hovered, dragging, pinned, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx, font } = dims
   const status = agent.status || 'unknown'
   const dot =
     status === 'healthy'     ? '#22c55e' :
@@ -600,9 +788,9 @@ function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter,
     status === 'unreachable' ? '#ef4444' :
                                '#6b7280'
   const stroke =
-    status === 'healthy'     ? 'rgba(34,197,94,0.45)' :
-    status === 'degraded'    ? 'rgba(234,179,8,0.45)' :
-    status === 'unreachable' ? 'rgba(239,68,68,0.45)' :
+    status === 'healthy'     ? 'rgba(34,197,94,0.5)' :
+    status === 'degraded'    ? 'rgba(234,179,8,0.5)' :
+    status === 'unreachable' ? 'rgba(239,68,68,0.5)' :
                                '#30363d'
   const opacity = status === 'unreachable' ? 0.55 : 1
   return (
@@ -617,12 +805,13 @@ function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter,
         width={w} height={h} rx={rx} ry={rx}
         fill="#161b22"
         stroke={stroke}
-        strokeWidth={hovered || dragging ? 2 : 1.2}
+        strokeWidth={hovered || dragging ? 2 : 1.3}
       />
+      {pinned && <PinIndicator x={w - 10} y={9} />}
       <circle cx={14} cy={h / 2} r={4} fill={dot} />
       <text
         x={26} y={h / 2 + 4}
-        fontSize="12"
+        fontSize={font}
         fontWeight="600"
         fill="#e6edf3"
         style={{ pointerEvents: 'none' }}
@@ -633,8 +822,8 @@ function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter,
   )
 }
 
-function ProtocolNode({ proto, pos, unreachable, hovered, dragging, flashing, onPointerDown, onMouseEnter, onMouseLeave }) {
-  const { w, h, rx } = NODE.module
+function ProtocolNode({ proto, pos, dims, unreachable, hovered, dragging, pinned, flashing, onPointerDown, onMouseEnter, onMouseLeave }) {
+  const { w, h, rx, font } = dims
   const color = PROTOCOL_COLOR[proto.protocol] || '#8b949e'
   const isRunning = proto.running
   const opacity = unreachable ? 0.45 : isRunning ? 1 : 0.55
@@ -667,10 +856,11 @@ function ProtocolNode({ proto, pos, unreachable, hovered, dragging, flashing, on
         strokeWidth={hovered || dragging || flashing ? 2 : 1.2}
         style={{ transition: 'fill 180ms, stroke 180ms' }}
       />
+      {pinned && <PinIndicator x={w - 8} y={7} />}
       <text
         x={w / 2} y={h / 2 + 4}
         textAnchor="middle"
-        fontSize="12"
+        fontSize={font}
         fontWeight="700"
         letterSpacing="2"
         fill={flashing ? '#1a0a0a' : (isRunning ? color : '#9ca3af')}
@@ -678,6 +868,14 @@ function ProtocolNode({ proto, pos, unreachable, hovered, dragging, flashing, on
       >
         {String(proto.protocol).toUpperCase()}
       </text>
+    </g>
+  )
+}
+
+function PinIndicator({ x, y }) {
+  return (
+    <g transform={`translate(${x - 4} ${y - 4})`} style={{ pointerEvents: 'none' }}>
+      <circle cx={4} cy={4} r={3.2} fill="#facc15" stroke="#0d1117" strokeWidth="0.8" />
     </g>
   )
 }
