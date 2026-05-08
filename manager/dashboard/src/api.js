@@ -104,15 +104,22 @@ export async function updateAlertStatus(alertId, status) {
   return res.json()
 }
 
-// Bulk update alerts status
+// Bulk update alerts status. 
 export async function updateAlertsBulk(ids, status) {
-  const res = await fetch(`${API_BASE}/alerts/bulk-status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids, status }),
-  })
-  if (!res.ok) throw new Error(`API error ${res.status}`)
-  return res.json()
+  const CHUNK = 500
+  let updated = 0
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK)
+    const res = await fetch(`${API_BASE}/alerts/bulk-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: slice, status }),
+    })
+    if (!res.ok) throw new Error(`API error ${res.status}`)
+    const json = await res.json()
+    updated += json.updated || 0
+  }
+  return { status: 'ok', updated }
 }
 
 // Fetch the rule catalog
