@@ -39,10 +39,6 @@ function moduleProtocol(name) {
   return n
 }
 
-function moduleNodeId(agentId, name) {
-  return `mod:${agentId}:${moduleProtocol(name)}`
-}
-
 function logSig(l) {
   return `${l.agent_id || ''}|${l.protocol || ''}|${l.timestamp || ''}|${l.date || ''}|${l.hour || ''}|${l.ip || ''}|${l.action || ''}|${l.path || ''}`
 }
@@ -56,22 +52,56 @@ function truncate(str, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
+// Aggregate raw module list into one entry per protocol.
+function agentProtocols(agent) {
+  const map = new Map()
+  for (const m of agent.last_health?.modules || []) {
+    const proto = moduleProtocol(m.name)
+    const isRunning = m.status === 'running'
+    const entry = map.get(proto) || { protocol: proto, running: false, names: [] }
+    entry.running = entry.running || isRunning
+    entry.names.push(m.name)
+    map.set(proto, entry)
+  }
+  // Stable ordering for layout determinism.
+  return [...map.values()].sort((a, b) => a.protocol.localeCompare(b.protocol))
+}
+
 function buildDefaultLayout(agents) {
   const pos = {}
   pos['manager'] = { x: CANVAS_W / 2, y: 70 }
   const n = Math.max(1, agents.length)
   const agentY = 230
-  const moduleStartY = 350
-  const moduleStepY = 44
+  const protoStartY = 360
+  const protoStepY = 50
   agents.forEach((a, i) => {
     const x = (CANVAS_W * (i + 1)) / (n + 1)
     pos[`agent:${a.agent_id}`] = { x, y: agentY }
-    const mods = a.last_health?.modules || []
-    mods.forEach((m, j) => {
-      pos[moduleNodeId(a.agent_id, m.name)] = { x, y: moduleStartY + j * moduleStepY }
+    agentProtocols(a).forEach((p, j) => {
+      pos[`mod:${a.agent_id}:${p.protocol}`] = { x, y: protoStartY + j * protoStepY }
     })
   })
   return pos
+}
+
+// ---- Persistence -----------------------------------------------------------
+
+const LS_POSITIONS = 'melissae:topology:positions'
+const LS_VIEW = 'melissae:topology:view'
+
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* quota / disabled */ }
 }
 
 // Vertical-leaning Bezier curve.
@@ -92,8 +122,11 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     [agents]
   )
 
-  // ---- Node positions (kept across re-renders / agent updates) -----------
-  const [positions, setPositions] = useState(() => buildDefaultLayout(visibleAgents))
+  // ---- Node positions (persisted across re-renders / sessions) -----------
+  const [positions, setPositions] = useState(() => {
+    const stored = loadJSON(LS_POSITIONS, {})
+    return { ...buildDefaultLayout(visibleAgents), ...stored }
+  })
 
   useEffect(() => {
     setPositions(prev => {
@@ -106,8 +139,18 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     })
   }, [visibleAgents])
 
-  // ---- View transform (pan / zoom) --------------------------------------
-  const [view, setView] = useState({ tx: 0, ty: 0, s: 1 })
+  // Persist position changes (debounced via rAF batching from React).
+  useEffect(() => { saveJSON(LS_POSITIONS, positions) }, [positions])
+
+  // ---- View transform (pan / zoom), persisted ---------------------------
+  const [view, setView] = useState(() => {
+    const v = loadJSON(LS_VIEW, null)
+    if (v && Number.isFinite(v.tx) && Number.isFinite(v.ty) && Number.isFinite(v.s)) {
+      return { tx: v.tx, ty: v.ty, s: clamp(v.s, ZOOM_MIN, ZOOM_MAX) }
+    }
+    return { tx: 0, ty: 0, s: 1 }
+  })
+  useEffect(() => { saveJSON(LS_VIEW, view) }, [view])
 
   // ---- Interaction state ------------------------------------------------
   const dragRef = useRef(null)
@@ -233,8 +276,13 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   }, [])
 
   const resetLayout = useCallback(() => {
-    setPositions(buildDefaultLayout(visibleAgents))
+    const fresh = buildDefaultLayout(visibleAgents)
+    setPositions(fresh)
     setView({ tx: 0, ty: 0, s: 1 })
+    try {
+      localStorage.removeItem(LS_POSITIONS)
+      localStorage.removeItem(LS_VIEW)
+    } catch { /* ignore */ }
   }, [visibleAgents])
 
   // ---- Connections -------------------------------------------------------
@@ -251,17 +299,15 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
       const aBot = { x: aPos.x, y: aPos.y + NODE.agent.h / 2 }
       lines.manager.push({ id: `link-m-${a.agent_id}`, d: curvePath(mBottom, aTop) })
 
-      const modules = a.last_health?.modules || []
-      modules.forEach(m => {
-        const proto = moduleProtocol(m.name)
-        const id = moduleNodeId(a.agent_id, m.name)
+      agentProtocols(a).forEach(p => {
+        const id = `mod:${a.agent_id}:${p.protocol}`
         const modPos = positions[id]
         if (!modPos) return
         const modTop = { x: modPos.x, y: modPos.y - NODE.module.h / 2 }
         lines.modules.push({
           id: `link-${id}`,
-          key: `${a.agent_id}:${proto}`,
-          color: PROTOCOL_COLOR[proto] || '#30363d',
+          key: `${a.agent_id}:${p.protocol}`,
+          color: PROTOCOL_COLOR[p.protocol] || '#30363d',
           d: curvePath(aBot, modTop),
         })
       })
@@ -362,9 +408,9 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
           <svg
             ref={svgRef}
             viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-            preserveAspectRatio="xMidYMid meet"
-            className="w-full select-none"
-            style={{ height: 520, cursor, touchAction: 'none' }}
+            preserveAspectRatio="xMidYMid slice"
+            className="block w-full h-full select-none"
+            style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}`, cursor, touchAction: 'none' }}
             onPointerDown={onPointerDownBackground}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -421,12 +467,12 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                 />
               )}
 
-              {/* Agents + their modules */}
+              {/* Agents + their protocols */}
               {visibleAgents.map(a => {
                 const aId = `agent:${a.agent_id}`
                 const aPos = positions[aId]
                 if (!aPos) return null
-                const modules = a.last_health?.modules || []
+                const protos = agentProtocols(a)
                 return (
                   <g key={a.agent_id}>
                     <AgentNode
@@ -438,15 +484,15 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                       onMouseEnter={() => setHoveringId(aId)}
                       onMouseLeave={() => setHoveringId(null)}
                     />
-                    {modules.map(m => {
-                      const mId = moduleNodeId(a.agent_id, m.name)
+                    {protos.map(p => {
+                      const mId = `mod:${a.agent_id}:${p.protocol}`
                       const mPos = positions[mId]
                       if (!mPos) return null
                       const flashing = flashes.some(f => f.nodeId === mId)
                       return (
-                        <ModuleNode
+                        <ProtocolNode
                           key={mId}
-                          module={m}
+                          proto={p}
                           pos={mPos}
                           unreachable={a.status === 'unreachable'}
                           hovered={hoveringId === mId}
@@ -575,14 +621,14 @@ function AgentNode({ agent, pos, hovered, dragging, onPointerDown, onMouseEnter,
   )
 }
 
-function ModuleNode({ module: mod, pos, unreachable, hovered, dragging, flashing, onPointerDown, onMouseEnter, onMouseLeave }) {
+function ProtocolNode({ proto, pos, unreachable, hovered, dragging, flashing, onPointerDown, onMouseEnter, onMouseLeave }) {
   const { w, h, rx } = NODE.module
-  const proto = moduleProtocol(mod.name)
-  const color = PROTOCOL_COLOR[proto] || '#8b949e'
-  const isRunning = mod.status === 'running'
+  const color = PROTOCOL_COLOR[proto.protocol] || '#8b949e'
+  const isRunning = proto.running
   const opacity = unreachable ? 0.45 : isRunning ? 1 : 0.55
   const fill = flashing ? 'rgba(248,113,113,0.85)' : 'rgba(22,27,34,1)'
   const stroke = flashing ? '#fca5a5' : isRunning ? color : '#4b5563'
+  const titleAttr = proto.names.length > 0 ? proto.names.join(', ') : proto.protocol
 
   return (
     <g
@@ -592,6 +638,7 @@ function ModuleNode({ module: mod, pos, unreachable, hovered, dragging, flashing
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
+      <title>{titleAttr}</title>
       {flashing && (
         <rect
           x={-6} y={-6} width={w + 12} height={h + 12} rx={rx + 4} ry={rx + 4}
@@ -611,12 +658,13 @@ function ModuleNode({ module: mod, pos, unreachable, hovered, dragging, flashing
       <text
         x={w / 2} y={h / 2 + 4}
         textAnchor="middle"
-        fontSize="11"
-        fontWeight="600"
+        fontSize="12"
+        fontWeight="700"
+        letterSpacing="2"
         fill={flashing ? '#1a0a0a' : (isRunning ? color : '#9ca3af')}
         style={{ pointerEvents: 'none', textDecoration: isRunning ? 'none' : 'line-through' }}
       >
-        {truncate(mod.name, 18)}
+        {String(proto.protocol).toUpperCase()}
       </text>
     </g>
   )
