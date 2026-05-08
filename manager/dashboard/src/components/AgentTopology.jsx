@@ -11,7 +11,7 @@ const PROTOCOL_COLOR = {
 
 // SVG world dimensions — the viewBox the user pans/zooms inside.
 const CANVAS_W = 1600
-const CANVAS_H = 720
+const CANVAS_H = 540
 
 // Node shapes (SVG units).
 const NODE = {
@@ -57,6 +57,7 @@ function agentProtocols(agent) {
   const map = new Map()
   for (const m of agent.last_health?.modules || []) {
     const proto = moduleProtocol(m.name)
+    if (proto === 'proxy') continue  
     const isRunning = m.status === 'running'
     const entry = map.get(proto) || { protocol: proto, running: false, names: [] }
     entry.running = entry.running || isRunning
@@ -69,16 +70,27 @@ function agentProtocols(agent) {
 
 function buildDefaultLayout(agents) {
   const pos = {}
-  pos['manager'] = { x: CANVAS_W / 2, y: 70 }
+  pos['manager'] = { x: CANVAS_W / 2, y: 60 }
   const n = Math.max(1, agents.length)
-  const agentY = 230
-  const protoStartY = 360
-  const protoStepY = 50
+  const agentY = 210
+  // Protocols fan out around each agent on a circular arc, like tree branches.
+  const radius = 140
+  const maxSpread = (110 * Math.PI) / 180  // total angular spread, capped at 110°
   agents.forEach((a, i) => {
     const x = (CANVAS_W * (i + 1)) / (n + 1)
     pos[`agent:${a.agent_id}`] = { x, y: agentY }
-    agentProtocols(a).forEach((p, j) => {
-      pos[`mod:${a.agent_id}:${p.protocol}`] = { x, y: protoStartY + j * protoStepY }
+
+    const protos = agentProtocols(a)
+    const k = protos.length
+    if (k === 0) return
+    // Tighten the spread for few branches so they stay close to the parent.
+    const spread = k === 1 ? 0 : Math.min(maxSpread, (k - 1) * (28 * Math.PI / 180))
+    protos.forEach((p, j) => {
+      const t = k === 1 ? 0 : j / (k - 1) - 0.5  // -0.5 … +0.5
+      const angle = t * spread  // 0 = straight down
+      const px = x + Math.sin(angle) * radius
+      const py = agentY + Math.cos(angle) * radius + 30
+      pos[`mod:${a.agent_id}:${p.protocol}`] = { x: px, y: py }
     })
   })
   return pos
@@ -86,8 +98,8 @@ function buildDefaultLayout(agents) {
 
 // ---- Persistence -----------------------------------------------------------
 
-const LS_POSITIONS = 'melissae:topology:positions'
-const LS_VIEW = 'melissae:topology:view'
+const LS_POSITIONS = 'melissae:topology:positions:v2'
+const LS_VIEW = 'melissae:topology:view:v2'
 
 function loadJSON(key, fallback) {
   try {

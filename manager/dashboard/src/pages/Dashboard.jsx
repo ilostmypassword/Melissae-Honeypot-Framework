@@ -179,6 +179,15 @@ export default function Dashboard() {
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
 
+      {/* Live attack topology */}
+      <AgentTopology
+        agents={agents}
+        logs={filteredLogs}
+        onModuleClick={(protocol, agentId) => navigate(
+          `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
+        )}
+      />
+
       {/* Daily Activity + Protocol Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-card p-5">
@@ -194,15 +203,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Live attack topology */}
-      <AgentTopology
-        agents={agents}
-        logs={filteredLogs}
-        onModuleClick={(protocol, agentId) => navigate(
-          `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
-        )}
-      />
     </div>
   )
 }
