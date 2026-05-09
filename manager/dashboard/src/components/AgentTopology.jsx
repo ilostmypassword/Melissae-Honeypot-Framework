@@ -9,45 +9,37 @@ const PROTOCOL_COLOR = {
   telnet: '#b08585',
 }
 
-// SVG world dimensions — what we pan/zoom inside.
 const CANVAS_W = 1800
 const CANVAS_H = 720
 
-// Node dimensions per depth (manager > agent > module).
 const NODE_DIMS = {
   manager: { w: 240, h: 56, rx: 12, font: 14 },
   agent:   { w: 200, h: 44, rx: 10, font: 12 },
   module:  { w: 130, h: 32, rx: 7,  font: 11 },
 }
 
-// Layout spacing (in SVG units).
 const SPACING = {
-  agentGapX:        90,   
-  moduleGapX:       18,    
-  rowVSpace:        280,   
+  agentGapX:        90,
+  moduleGapX:       18,
+  moduleGapY:       12,
+  moduleColsMax:    3,
+  rowVSpace:        140,
   managerY:         80,
   firstAgentY:      260,
-  agentToModuleY:   130,  
+  agentToModuleY:   100,
 }
 
+const LS_POSITIONS = 'melissae:topology:positions:v5'
 
-const LS_POSITIONS = 'melissae:topology:positions:v4'
-
-// View / zoom controls.
 const ZOOM_MIN = 0.3
 const ZOOM_MAX = 2.5
 const ZOOM_STEP = 1.2
 const FIT_PADDING = 60
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 // Map an arbitrary container/log name to its canonical protocol bucket.
-// Order matters: more specific tokens first.
 function moduleProtocol(name) {
   const n = String(name || '').toLowerCase()
-  if (n.includes('cve'))    return 'telnet'   // CVE-2026-24061 is a telnet auth bypass
+  if (n.includes('cve'))    return 'telnet'
   if (n.includes('ssh'))    return 'ssh'
   if (n.includes('telnet')) return 'telnet'
   if (n.includes('ftp'))    return 'ftp'
@@ -73,18 +65,17 @@ function agentProtocols(agent) {
   const map = new Map()
   for (const m of agent.last_health?.modules || []) {
     const proto = moduleProtocol(m.name)
-    if (proto === 'proxy') continue   // infrastructure container, not an attack surface
+    if (proto === 'proxy') continue
     const isRunning = m.status === 'running'
     const entry = map.get(proto) || { protocol: proto, running: false, names: [] }
     entry.running = entry.running || isRunning
     entry.names.push(m.name)
     map.set(proto, entry)
   }
-  // Stable, deterministic order so layouts don't shuffle on re-render.
   return [...map.values()].sort((a, b) => a.protocol.localeCompare(b.protocol))
 }
 
-// Vertical-leaning Bezier curve used for connection paths.
+// Vertical-leaning Bezier curve for connection paths.
 function curvePath(p1, p2) {
   const dy = (p2.y - p1.y) / 2
   return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
@@ -103,10 +94,6 @@ function saveJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// ---------------------------------------------------------------------------
-// Graph + layout
-// ---------------------------------------------------------------------------
-
 // Build the node graph keyed by id.
 function buildGraph(agents) {
   const graph = {
@@ -123,30 +110,32 @@ function buildGraph(agents) {
   return graph
 }
 
-// Static hierarchical layout: manager → agents grid → modules row beneath each agent.
-// Deterministic, never overlaps, never moves on its own.
+// Static hierarchical layout: manager → agents grid → 2D module grid per agent.
 function computeLayout(graph) {
   const pos = {}
   const agentEntries = Object.values(graph)
     .filter(n => n.kind === 'agent')
     .sort((a, b) => a.id.localeCompare(b.id))
 
-  // Manager always sits at the top center.
   pos['manager'] = { x: CANVAS_W / 2, y: SPACING.managerY }
 
   if (agentEntries.length === 0) return pos
 
-  // Compute each agent's "footprint width" — wide enough to hold all its modules in a row.
   const moduleW = NODE_DIMS.module.w
+  const moduleH = NODE_DIMS.module.h
+  const colsMax = SPACING.moduleColsMax
+
   const footprints = agentEntries.map(a => {
     const children = Object.values(graph).filter(c => c.parent === a.id)
     const n = children.length
-    const childRowW = n > 0 ? n * moduleW + (n - 1) * SPACING.moduleGapX : 0
-    const footprint = Math.max(NODE_DIMS.agent.w, childRowW)
-    return { agent: a, children, footprint }
+    const cols = n > 0 ? Math.min(n, colsMax) : 0
+    const gridRows = n > 0 ? Math.ceil(n / colsMax) : 0
+    const childGridW = cols > 0 ? cols * moduleW + (cols - 1) * SPACING.moduleGapX : 0
+    const childGridH = gridRows > 0 ? gridRows * moduleH + (gridRows - 1) * SPACING.moduleGapY : 0
+    const footprint = Math.max(NODE_DIMS.agent.w, childGridW)
+    return { agent: a, children, footprint, cols, gridRows, childGridH }
   })
 
-  // Pack agent footprints into rows that fit horizontally.
   const maxRowW = CANVAS_W - 2 * FIT_PADDING
   const rows = []
   let curRow = []
@@ -163,31 +152,38 @@ function computeLayout(graph) {
   }
   if (curRow.length > 0) rows.push(curRow)
 
-  // Place each row centered horizontally.
-  rows.forEach((row, rowIdx) => {
+  let cursorY = SPACING.firstAgentY
+  rows.forEach(row => {
     const rowW = row.reduce((sum, fp, i) => sum + fp.footprint + (i > 0 ? SPACING.agentGapX : 0), 0)
     let cursorX = CANVAS_W / 2 - rowW / 2
-    const agentY = SPACING.firstAgentY + rowIdx * SPACING.rowVSpace
-    const moduleY = agentY + SPACING.agentToModuleY
+    const agentY = cursorY
+    const firstModuleRowY = agentY + SPACING.agentToModuleY
 
     for (const fp of row) {
       const agentX = cursorX + fp.footprint / 2
       pos[fp.agent.id] = { x: agentX, y: agentY }
 
-      const n = fp.children.length
-      if (n > 0) {
-        const childRowW = n * moduleW + (n - 1) * SPACING.moduleGapX
-        const childStart = agentX - childRowW / 2 + moduleW / 2
-        fp.children.forEach((child, j) => {
-          pos[child.id] = {
-            x: childStart + j * (moduleW + SPACING.moduleGapX),
-            y: moduleY,
+      const { children, cols, gridRows } = fp
+      if (children.length > 0) {
+        for (let j = 0; j < children.length; j++) {
+          const r = Math.floor(j / cols)
+          const isLastRow = r === gridRows - 1
+          const itemsInRow = isLastRow ? (children.length - r * cols) : cols
+          const rowW2 = itemsInRow * moduleW + (itemsInRow - 1) * SPACING.moduleGapX
+          const rowStartX = agentX - rowW2 / 2 + moduleW / 2
+          const c = j - r * cols
+          pos[children[j].id] = {
+            x: rowStartX + c * (moduleW + SPACING.moduleGapX),
+            y: firstModuleRowY + r * (moduleH + SPACING.moduleGapY),
           }
-        })
+        }
       }
 
       cursorX += fp.footprint + SPACING.agentGapX
     }
+
+    const tallestGridH = row.reduce((m, fp) => Math.max(m, fp.childGridH), 0)
+    cursorY += SPACING.agentToModuleY + tallestGridH + SPACING.rowVSpace
   })
 
   return pos
@@ -220,18 +216,13 @@ function computeFitView(positions, dimsLookup) {
   }
 }
 
-// Hash of the graph structure, used to detect when the topology actually changes
-// (vs. just a status refresh) so we only recompute the static layout when needed.
+// Hash of the graph structure to detect when topology actually changes.
 function graphSignature(agents) {
   return agents
     .map(a => `${a.agent_id}:${agentProtocols(a).map(p => p.protocol).join(',')}`)
     .sort()
     .join('|')
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function AgentTopology({ agents = [], logs = [], onModuleClick }) {
   const svgRef = useRef(null)
@@ -245,8 +236,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   const graph = useMemo(() => buildGraph(visibleAgents), [visibleAgents])
   const signature = useMemo(() => graphSignature(visibleAgents), [visibleAgents])
 
-  // Positions: merge of computed layout + persisted user-placed positions.
-  // Static — they only change when the user drags or the graph structure changes.
   const [positions, setPositions] = useState(() => {
     const stored = loadJSON(LS_POSITIONS, {})
     const computed = computeLayout(graph)
@@ -257,8 +246,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     return merged
   })
 
-  // When the graph structure changes (agent added/removed, module enabled), recompute
-  // the static layout for any new nodes while preserving user-placed positions.
   const lastSigRef = useRef(signature)
   useEffect(() => {
     if (lastSigRef.current === signature) return
@@ -267,31 +254,27 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     setPositions(prev => {
       const next = { ...computed }
       for (const id of Object.keys(computed)) {
-        if (prev[id]) next[id] = prev[id]   // keep user-placed
+        if (prev[id]) next[id] = prev[id]
       }
       return next
     })
-    // Re-fit when topology changes.
     setAutoFit(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature])
 
   const dimsLookup = useCallback(id => graph[id]?.dims, [graph])
 
-  // ---- View transform (pan / zoom) --------------------------------------
   const [view, setView] = useState({ tx: 0, ty: 0, s: 1 })
   const [autoFit, setAutoFit] = useState(true)
   const viewRef = useRef(view)
   useEffect(() => { viewRef.current = view }, [view])
 
-  // Auto-fit runs only when triggered (mount, graph change, Fit button, resize).
   useEffect(() => {
     if (!autoFit) return
     const next = computeFitView(positions, dimsLookup)
     if (next) setView(next)
   }, [autoFit, positions, dimsLookup])
 
-  // Re-fit on container resize when auto-fit is on.
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
     const el = wrapperRef.current
@@ -306,7 +289,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     return () => ro.disconnect()
   }, [autoFit, positions, dimsLookup])
 
-  // ---- Pointer interaction ----------------------------------------------
   const dragRef = useRef(null)
   const [draggingId, setDraggingId] = useState(null)
   const [hoveringId, setHoveringId] = useState(null)
@@ -367,7 +349,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     if (drag.kind === 'node') {
       const svgPt = screenToSvg(e.clientX, e.clientY)
       const world = svgToWorld(svgPt.x, svgPt.y)
-      // Treat the click as a real drag only after a small threshold.
       if (!drag.moved) {
         const cur = positions[drag.id]
         if (cur && (Math.abs(world.x - drag.offX - cur.x) > 4 || Math.abs(world.y - drag.offY - cur.y) > 4)) {
@@ -400,20 +381,17 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     if (!drag) return
 
     if (drag.kind === 'node') {
-      // Click without movement on a module → trigger callback.
       if (!drag.moved && drag.id.startsWith('mod:')) {
         const [, agentId, proto] = drag.id.split(':')
         if (onModuleClick) onModuleClick(proto, agentId)
         return
       }
-      // Otherwise persist the latest positions (read fresh, not the captured closure).
       if (drag.moved) {
         setPositions(latest => { saveJSON(LS_POSITIONS, latest); return latest })
       }
     }
   }
 
-  // Wheel zoom — attached natively so we can prevent page scroll without warnings.
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
@@ -433,7 +411,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     return () => svg.removeEventListener('wheel', handler)
   }, [screenToSvg])
 
-  // ---- Toolbar actions --------------------------------------------------
   const zoomBy = useCallback(factor => {
     setAutoFit(false)
     setView(v => {
@@ -455,7 +432,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     setAutoFit(true)
   }, [graph])
 
-  // ---- Connections ------------------------------------------------------
   const connections = useMemo(() => {
     const lines = { manager: [], modules: [] }
     const m = positions['manager']
@@ -489,7 +465,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     return lines
   }, [graph, positions])
 
-  // ---- Live attack effects ----------------------------------------------
   const seenRef = useRef(null)
   const timersRef = useRef(new Set())
   const idCounterRef = useRef(0)
@@ -524,12 +499,10 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
 
   // Flash a module node and animate a packet along the agent → module edge.
   function triggerFlash(log) {
-    // Normalize the log's protocol the same way we normalize module names so
-    // CVE-tagged telnet logs flash the right node.
     const proto = moduleProtocol(String(log.protocol || ''))
     if (!proto) return
     const nodeId = `mod:${log.agent_id}:${proto}`
-    if (!positions[nodeId]) return  // no such module node — silently drop
+    if (!positions[nodeId]) return
 
     const fid = ++idCounterRef.current
     setFlashes(prev => [...prev, { id: fid, nodeId }])
@@ -551,7 +524,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     }
   }
 
-  // ---- Render ------------------------------------------------------------
   const cursor = isPanning ? 'grabbing' : draggingId ? 'grabbing' : 'grab'
 
   return (
@@ -602,7 +574,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
             <rect width={CANVAS_W} height={CANVAS_H} fill="url(#topo-grid)" opacity="0.35" />
 
             <g transform={`translate(${view.tx} ${view.ty}) scale(${view.s})`}>
-              {/* Connections */}
               {connections.manager.map(p => (
                 <path key={p.id} d={p.d} stroke="#30363d" strokeWidth="1.4" fill="none" />
               ))}
@@ -610,7 +581,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                 <path key={p.id} d={p.d} stroke={p.color} strokeOpacity="0.5" strokeWidth="1.2" fill="none" strokeDasharray="4 4" />
               ))}
 
-              {/* Packets */}
               {packets.map(pk => (
                 <g key={pk.id}>
                   <circle r="5" fill={pk.color} fillOpacity="0.25">
@@ -623,7 +593,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
                 </g>
               ))}
 
-              {/* Nodes */}
               {Object.keys(graph).map(id => {
                 const meta = graph[id]
                 const p = positions[id]
@@ -654,7 +623,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
             </g>
           </svg>
 
-          {/* Legend */}
           <div className="absolute bottom-2 left-2 flex flex-wrap gap-1.5 text-[10px] font-mono pointer-events-none">
             {Object.entries(PROTOCOL_COLOR).map(([p, c]) => (
               <span key={p} className="px-1.5 py-0.5 rounded bg-surface-secondary/80 border border-border/50" style={{ color: c }}>
@@ -670,10 +638,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Node components
-// ---------------------------------------------------------------------------
 
 function ToolbarBtn({ label, title, onClick }) {
   return (
