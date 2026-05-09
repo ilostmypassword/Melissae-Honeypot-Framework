@@ -36,61 +36,70 @@ On the manager side, a **rule-based alerting engine** evaluates each observed IP
 <br>
 
 <details open>
-<summary><strong>📊 Overview Dashboard</strong></summary>
+<summary><strong>Dashboard Overview</strong></summary>
 <br>
 <p align="center">
-  <img width="1817" height="914" alt="screenshot_21042026_104126" src="https://github.com/user-attachments/assets/cb5ee4c9-2710-4165-b9cb-f520ab26f814" />
-</p>
-</details>
-
-
-
-<details>
-<summary><strong>📈 Statistics & Charts</strong></summary>
-<br>
-<p align="center">
-  <img width="1817" height="925" alt="screenshot_21042026_104317" src="https://github.com/user-attachments/assets/e22d8471-272a-4336-9584-714227eb5cbc" />
+  <img width="1919" height="937" alt="overview-dashboard" src="https://github.com/user-attachments/assets/d86012db-b845-437f-bda4-e47e9baa7d8d" />
 </p>
 </details>
 
 <details>
-<summary><strong>🖥️ Agents Management</strong></summary>
+<summary><strong>Rule Based Alerting</strong></summary>
 <br>
 <p align="center">
-  <img width="1820" height="916" alt="screenshot_21042026_104348" src="https://github.com/user-attachments/assets/2b738ee8-3032-4a17-87ae-c8ae0c66859f" />
-</p>
-</details>
-
-
-<details>
-<summary><strong>🌍 GeoIP Attack Map</strong></summary>
-<br>
-<p align="center">
-  <img width="1821" height="915" alt="screenshot_21042026_104420" src="https://github.com/user-attachments/assets/fe45fbeb-29dc-452e-ab4d-63d7b2b71750" />
-</p>
-<p align="center">
-  <img width="1817" height="912" alt="screenshot_21042026_104451" src="https://github.com/user-attachments/assets/9ffaaf3d-7195-422c-b4aa-60bf2772285c" />
-</p>
-</details>
-
-
-
-<details>
-<summary><strong>🔎 Search Engine</strong></summary>
-<br>
-<p align="center">
-  <img width="1815" height="912" alt="screenshot_21042026_104645" src="https://github.com/user-attachments/assets/146e7fab-bdd7-46f2-b52d-cd5d22ba1764" />
+  <img width="1919" height="936" alt="detection-alerts" src="https://github.com/user-attachments/assets/d6015f73-dd34-4e36-93d3-762c3b464fc6" />
 </p>
 </details>
 
 <details>
-<summary><strong>🎯 Threat Intelligence</strong></summary>
+<summary><strong>Statistics & Charts</strong></summary>
 <br>
 <p align="center">
-  <img width="1816" height="913" alt="screenshot_21042026_104521" src="https://github.com/user-attachments/assets/a5ba43c9-e668-404c-bf7f-631c290e9aeb" />
+  <img width="1919" height="937" alt="statistics-traffic-1" src="https://github.com/user-attachments/assets/ce5fd426-5be3-4275-9003-d11ad493b620" />
 </p>
 <p align="center">
-  <img width="1817" height="913" alt="screenshot_21042026_104549" src="https://github.com/user-attachments/assets/09ed8e3c-9baa-47fc-821f-b92d5cac41c9" />
+  <img width="1919" height="937" alt="statistics-traffic-2" src="https://github.com/user-attachments/assets/f298eea0-f853-4467-891d-64938b5a9f29" />
+</p>
+<p align="center">
+  <img width="1919" height="934" alt="statistics-threats-1" src="https://github.com/user-attachments/assets/8da4b56f-ff6e-4714-a3a4-36ca61a053ba" />
+</p>
+</details>
+
+<details>
+<summary><strong>Agents Management</strong></summary>
+<br>
+<p align="center">
+  <img width="1919" height="938" alt="overview-agents" src="https://github.com/user-attachments/assets/c2a9105d-a9fb-4357-8df6-0a39fb3afaba" />
+</p>
+</details>
+
+<details>
+<summary><strong>GeoIP Attack Map</strong></summary>
+<br>
+<p align="center">
+  <img width="1919" height="936" alt="explore-geo-map-1" src="https://github.com/user-attachments/assets/6741957f-98ba-4252-b371-ee8d1fd74d35" />
+</p>
+<p align="center">
+  <img width="1919" height="935" alt="explore-geo-map-2" src="https://github.com/user-attachments/assets/815f9905-33ab-47ca-be41-23f093749dc6" />
+</p>
+</details>
+
+<details>
+<summary><strong>Search Engine</strong></summary>
+<br>
+<p align="center">
+  <img width="1919" height="935" alt="explore-search" src="https://github.com/user-attachments/assets/88de9da8-9e79-45a6-bb71-fc0cf6265433" />
+</p>
+</details>
+
+<details>
+<summary><strong>Threat Intelligence</strong></summary>
+<br>
+<p align="center">
+  <img width="1919" height="936" alt="intelligence-threat-intelligence-1" src="https://github.com/user-attachments/assets/9d276fbd-1a70-49e6-b860-eb3ee1585fbb" />
+</p>
+<p align="center">
+  <img width="1919" height="937" alt="intelligence-threat-intelligence-2" src="https://github.com/user-attachments/assets/94e9cd5a-e14f-4f34-88c1-a0d81d0201f4" />
 </p>
 </details>
 
