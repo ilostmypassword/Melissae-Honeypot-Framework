@@ -179,7 +179,7 @@ def _compute_threat(ip: str, bucket: Dict) -> Dict:
     reasons = []
     for rid, r in sorted(bucket["rules"].items(),
                          key=lambda kv: (-kv[1]["score"], kv[0])):
-        reasons.append(f"{r['name']} ({r['count']}× — +{r['score']})")
+        reasons.append(f"{r['name']} ({rid})")
 
     doc = {
         "type": "ip",
