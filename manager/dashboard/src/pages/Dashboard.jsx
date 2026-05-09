@@ -139,8 +139,8 @@ export default function Dashboard() {
       </div>
 
       {/* Topology + Recent alerts side by side */}
-      <div className={`grid grid-cols-1 ${recentAlerts.length > 0 ? 'lg:grid-cols-3' : ''} gap-4`}>
-        <div className={recentAlerts.length > 0 ? 'lg:col-span-2' : ''}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
           <AgentTopology
             agents={agents}
             logs={filteredLogs}
@@ -149,25 +149,25 @@ export default function Dashboard() {
             )}
           />
         </div>
-        {recentAlerts.length > 0 && (
-          <div className="glass-card p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
-                </span>
-                <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
-                  Recent alerts
-                </span>
-              </div>
-              <Link
-                to="/alerts"
-                className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors"
-              >
-                View all →
-              </Link>
+        <div className="glass-card p-4 flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
+              </span>
+              <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
+                Recent alerts
+              </span>
             </div>
+            <Link
+              to="/alerts"
+              className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors"
+            >
+              View all →
+            </Link>
+          </div>
+          {recentAlerts.length > 0 ? (
             <div className="flex flex-col divide-y divide-border/40 flex-1">
               {recentAlerts.map(a => (
                 <Link
@@ -186,8 +186,14 @@ export default function Dashboard() {
                 </Link>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+              <div className="text-2xl mb-2 opacity-40">✓</div>
+              <div className="text-xs text-text-muted">No active alerts</div>
+              <div className="text-[10px] text-text-muted/70 mt-1">All systems quiet</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Daily Activity + Protocol Breakdown */}
