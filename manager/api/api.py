@@ -26,9 +26,10 @@ REQUIRED_LOG_FIELDS = {"protocol", "date", "ip", "action"}
 
 MAX_FIELD_LEN = 512
 
+_mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000, maxPoolSize=50)
+
 def get_db():
-    client = MongoClient(MONGO_URI)
-    return client[DB_NAME]
+    return _mongo_client[DB_NAME]
 
 # Sanitize a string field: strip control chars, limit length, block $ operators
 def _sanitize_str(val, max_len=MAX_FIELD_LEN):
@@ -242,7 +243,9 @@ def api_geoip():
     for ip in raw_ips:
         try:
             addr = ipaddress.ip_address(ip)
-            if not addr.is_private and not addr.is_loopback:
+            if (not addr.is_private and not addr.is_loopback
+                    and not addr.is_link_local and not addr.is_multicast
+                    and not addr.is_reserved and not addr.is_unspecified):
                 ips.append(str(addr))
         except ValueError:
             continue
