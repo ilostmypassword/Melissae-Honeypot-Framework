@@ -171,6 +171,7 @@ cmd_help() {
     echo -e "  ${CYAN}stop${RESET} [module|all]             Stop modules"
     echo -e "  ${CYAN}restart${RESET}                      Restart all services"
     echo -e "  ${CYAN}build${RESET}                        Rebuild containers"
+    echo -e "  ${CYAN}update${RESET}                       Stop, git pull, rebuild, prompt to restart"
     echo
     echo -e "${BOLD}${WHITE}MODULES${RESET}"
     echo -e "  ${CYAN}list${RESET}                         List available modules with status"
@@ -637,6 +638,50 @@ cmd_build() {
     success "Containers rebuilt"
 }
 
+# Stop modules, pull latest code, rebuild, then offer to restart
+cmd_update() {
+    if ! ensure_compose_cmd; then return 1; fi
+
+    local repo_root
+    repo_root=$(git -C "$WORKING_DIRECTORY" rev-parse --show-toplevel 2>/dev/null)
+    if [ -z "$repo_root" ]; then
+        error "Not inside a git repository. Cannot update."
+        return 1
+    fi
+
+    echo
+    info "Step 1/3: Stopping honeypot modules and daemon..."
+    cmd_stop all
+
+    echo
+    info "Step 2/3: Pulling latest changes (git pull)..."
+    if ! git -C "$repo_root" pull --ff-only; then
+        error "git pull failed. Resolve conflicts manually then re-run 'update'."
+        return 1
+    fi
+    success "Repository updated"
+
+    echo
+    info "Step 3/3: Rebuilding honeypot containers..."
+    if ! "${compose_cmd[@]}" build --no-cache; then
+        error "Build failed."
+        return 1
+    fi
+    success "Containers rebuilt"
+
+    echo
+    local answer=""
+    read -r -p "$(echo -e "${YELLOW}[?]${RESET} Restart enabled modules now? [Y/n] ")" answer
+    case "${answer,,}" in
+        ""|y|yes)
+            cmd_start all
+            ;;
+        *)
+            warn "Modules left stopped. Run 'start' when ready."
+            ;;
+    esac
+}
+
 # Show SQLite buffer status
 cmd_buffer() {
     local db_path="$WORKING_DIRECTORY/data/buffer.db"
@@ -804,6 +849,7 @@ main_loop() {
             stop)            cmd_stop "${params[@]}" ;;
             restart)         cmd_restart ;;
             build)           cmd_build ;;
+            update)          cmd_update ;;
             list|ls)         cmd_list ;;
             enable)          cmd_enable "${params[@]}" ;;
             disable)         cmd_disable "${params[@]}" ;;
