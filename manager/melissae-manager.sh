@@ -252,6 +252,7 @@ cmd_help() {
     echo -e "  ${CYAN}stop${RESET}                         Stop manager services"
     echo -e "  ${CYAN}restart${RESET}                      Restart manager services"
     echo -e "  ${CYAN}build${RESET}                        Rebuild manager containers"
+    echo -e "  ${CYAN}update${RESET}                       Stop, git pull, rebuild, prompt to restart"
     echo
     echo -e "${BOLD}${WHITE}AGENT MANAGEMENT${RESET}"
     echo -e "  ${CYAN}enroll${RESET} <agent-name> <host>   Generate enrollment token for new agent"
@@ -340,6 +341,51 @@ cmd_build() {
     info "Rebuilding manager containers..."
     "${compose_cmd[@]}" build --no-cache
     success "Containers rebuilt"
+}
+
+# Stop services, pull latest code, rebuild, then offer to restart
+cmd_update() {
+    if ! ensure_compose_cmd; then return 1; fi
+
+    local repo_root
+    repo_root=$(git -C "$WORKING_DIRECTORY" rev-parse --show-toplevel 2>/dev/null)
+    if [ -z "$repo_root" ]; then
+        error "Not inside a git repository. Cannot update."
+        return 1
+    fi
+
+    echo
+    info "Step 1/3: Stopping manager services..."
+    "${compose_cmd[@]}" stop 2>/dev/null
+    success "Services stopped"
+
+    echo
+    info "Step 2/3: Pulling latest changes (git pull)..."
+    if ! git -C "$repo_root" pull --ff-only; then
+        error "git pull failed. Resolve conflicts manually then re-run 'update'."
+        return 1
+    fi
+    success "Repository updated"
+
+    echo
+    info "Step 3/3: Rebuilding manager containers..."
+    if ! "${compose_cmd[@]}" build --no-cache; then
+        error "Build failed."
+        return 1
+    fi
+    success "Containers rebuilt"
+
+    echo
+    local answer=""
+    read -r -p "$(echo -e "${YELLOW}[?]${RESET} Restart manager services now? [Y/n] ")" answer
+    case "${answer,,}" in
+        ""|y|yes)
+            cmd_start
+            ;;
+        *)
+            warn "Services left stopped. Run 'start' when ready."
+            ;;
+    esac
 }
 
 # Enroll a new agent with certificate and token
@@ -1041,6 +1087,7 @@ main_loop() {
             stop)           cmd_stop ;;
             restart)        cmd_restart ;;
             build)          cmd_build ;;
+            update)         cmd_update ;;
             enroll)         cmd_enroll "${params[@]}" ;;
             agents)         cmd_agents ;;
             agent-exec)     cmd_agent_exec "${params[@]}" ;;
