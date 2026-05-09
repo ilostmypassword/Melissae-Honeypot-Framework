@@ -28,6 +28,8 @@ export default function Dashboard() {
   const [secondsAgo, setSecondsAgo] = useState(0)
   const navigate = useNavigate()
   const refreshTimer = useRef(null)
+  const alertsListRef = useRef(null)
+  const [maxVisibleAlerts, setMaxVisibleAlerts] = useState(3)
 
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
@@ -35,11 +37,11 @@ export default function Dashboard() {
       const [logsData, agentsData, alertsData] = await Promise.all([
         fetchLogs(),
         fetchAgents().catch(() => []),
-        fetchAlerts({ status: 'new', limit: 3 }).catch(() => []),
+        fetchAlerts({ status: 'new', limit: 20 }).catch(() => []),
       ])
       setLogs(logsData)
       setAgents(agentsData)
-      setRecentAlerts(Array.isArray(alertsData) ? alertsData.slice(0, 3) : [])
+      setRecentAlerts(Array.isArray(alertsData) ? alertsData : [])
       setLastRefresh(Date.now())
       setError(null)
     } catch (err) {
@@ -61,6 +63,21 @@ export default function Dashboard() {
     }, 1000)
     return () => clearInterval(t)
   }, [lastRefresh])
+
+  useEffect(() => {
+    const el = alertsListRef.current
+    if (!el) return
+    const ROW_HEIGHT = 36
+    const compute = () => {
+      const h = el.clientHeight
+      const n = Math.max(1, Math.floor(h / ROW_HEIGHT))
+      setMaxVisibleAlerts(n)
+    }
+    compute()
+    const ro = new ResizeObserver(compute)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [recentAlerts.length])
 
   const agentIds = useMemo(() => [...new Set(logs.map(l => l.agent_id).filter(Boolean))].sort(), [logs])
 
@@ -159,8 +176,8 @@ export default function Dashboard() {
             </Link>
           </div>
           {recentAlerts.length > 0 ? (
-            <div className="flex flex-col divide-y divide-border/40 flex-1">
-              {recentAlerts.map(a => (
+            <div ref={alertsListRef} className="flex flex-col divide-y divide-border/40 flex-1 overflow-hidden">
+              {recentAlerts.slice(0, maxVisibleAlerts).map(a => (
                 <Link
                   key={a._id}
                   to="/alerts"
