@@ -128,47 +128,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent alerts widget */}
-      {recentAlerts.length > 0 && (
-        <div className="glass-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
-              </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
-                Recent alerts
-              </span>
-            </div>
-            <Link
-              to="/alerts"
-              className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors"
-            >
-              View all →
-            </Link>
-          </div>
-          <div className="flex flex-col divide-y divide-border/40">
-            {recentAlerts.map(a => (
-              <Link
-                key={a._id}
-                to="/alerts"
-                className="flex items-center gap-3 py-2 hover:bg-surface-hover/30 -mx-2 px-2 rounded-md transition-colors"
-              >
-                <SeverityTag severity={a.severity} />
-                <span className="text-xs font-semibold text-text-primary truncate flex-1">
-                  {a.rule_name || a.rule_id}
-                </span>
-                {a.ip && (
-                  <code className="text-[11px] font-mono text-text-secondary shrink-0">{a.ip}</code>
-                )}
-                <span className="text-[10px] text-text-muted shrink-0 font-mono">+{a.score}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Key Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard value={s.totalLogs} label="Total Logs" trend={prevS.totalTrend} />
@@ -179,14 +138,57 @@ export default function Dashboard() {
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
 
-      {/* Live attack topology */}
-      <AgentTopology
-        agents={agents}
-        logs={filteredLogs}
-        onModuleClick={(protocol, agentId) => navigate(
-          `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
+      {/* Topology + Recent alerts side by side */}
+      <div className={`grid grid-cols-1 ${recentAlerts.length > 0 ? 'lg:grid-cols-3' : ''} gap-4`}>
+        <div className={recentAlerts.length > 0 ? 'lg:col-span-2' : ''}>
+          <AgentTopology
+            agents={agents}
+            logs={filteredLogs}
+            onModuleClick={(protocol, agentId) => navigate(
+              `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
+            )}
+          />
+        </div>
+        {recentAlerts.length > 0 && (
+          <div className="glass-card p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-verdict-malicious opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-verdict-malicious" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
+                  Recent alerts
+                </span>
+              </div>
+              <Link
+                to="/alerts"
+                className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors"
+              >
+                View all →
+              </Link>
+            </div>
+            <div className="flex flex-col divide-y divide-border/40 flex-1">
+              {recentAlerts.map(a => (
+                <Link
+                  key={a._id}
+                  to="/alerts"
+                  className="flex items-center gap-2 py-2 hover:bg-surface-hover/30 -mx-2 px-2 rounded-md transition-colors min-w-0"
+                >
+                  <SeverityTag severity={a.severity} />
+                  <span className="text-xs font-semibold text-text-primary truncate flex-1 min-w-0">
+                    {a.rule_name || a.rule_id}
+                  </span>
+                  {a.ip && (
+                    <code className="text-[10px] font-mono text-text-secondary shrink-0">{a.ip}</code>
+                  )}
+                  <span className="text-[10px] text-text-muted shrink-0 font-mono">+{a.score}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
-      />
+      </div>
 
       {/* Daily Activity + Protocol Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
