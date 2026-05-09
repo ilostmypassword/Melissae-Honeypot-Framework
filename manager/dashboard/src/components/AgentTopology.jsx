@@ -623,13 +623,6 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
             </g>
           </svg>
 
-          <div className="absolute bottom-2 left-2 flex flex-wrap gap-1.5 text-[10px] font-mono pointer-events-none">
-            {Object.entries(PROTOCOL_COLOR).map(([p, c]) => (
-              <span key={p} className="px-1.5 py-0.5 rounded bg-surface-secondary/80 border border-border/50" style={{ color: c }}>
-                {p}
-              </span>
-            ))}
-          </div>
           <div className="absolute bottom-2 right-2 text-[10px] font-mono text-text-muted pointer-events-none">
             drag · wheel zoom · click protocol
           </div>
