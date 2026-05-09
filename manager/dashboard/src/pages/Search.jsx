@@ -18,6 +18,7 @@ export default function Search() {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
+    setLoading(true)
     const logId = searchParams.get('log_id')
     if (logId) {
       fetchLogs({ log_id: logId })
@@ -42,11 +43,15 @@ export default function Search() {
           const { results: r, terms } = searchLogs(filtered, q)
           setResults(r)
           setSearchTerms(terms)
+        } else {
+          setResults(null)
+          setSearchTerms([])
+          setQuery('')
         }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [searchParams])
 
   const agentIds = useMemo(() => {
     const ids = [...new Set(logs.map(l => l.agent_id).filter(Boolean))]

@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from pymongo import MongoClient
@@ -30,20 +30,19 @@ def parse_timestamp(log: dict) -> Optional[datetime]:
 # Get the most recent log timestamp for an IP
 def get_last_seen(db, ip: str) -> Optional[datetime]:
     try:
-        cursor = db["logs"].find({"ip": ip}, {"timestamp": 1, "date": 1, "hour": 1})
-        last_seen = None
-        for log in cursor:
-            dt = parse_timestamp(log)
-            if dt and (last_seen is None or dt > last_seen):
-                last_seen = dt
-        return last_seen
+        doc = db["logs"].find_one(
+            {"ip": ip},
+            {"timestamp": 1, "date": 1, "hour": 1, "_id": 0},
+            sort=[("timestamp", -1)],
+        )
+        return parse_timestamp(doc) if doc else None
     except PyMongoError as e:
         print(f"[purge_iocs] Error fetching logs for {ip}: {e}")
         return None
 
 # Remove benign IPs and their logs if unseen for 1 hour
 def purge_benign_older_than_1h():
-    cutoff = datetime.utcnow() - timedelta(hours=1)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]

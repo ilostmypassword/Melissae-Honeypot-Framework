@@ -127,6 +127,21 @@ class PushClient:
 class HealthHandler(BaseHTTPRequestHandler):
     agent_state = {}
     compose_cmd = None
+    expected_manager_cn = None
+
+    def _peer_cn(self) -> str:
+        try:
+            cert = self.connection.getpeercert()
+        except Exception:
+            return ""
+        if not cert:
+            return ""
+        for rdn in cert.get('subject', ()):
+            for k, v in rdn:
+                if k == 'commonName':
+                    return v
+        return ""
+
     def do_GET(self):
         if self.path != '/health':
             self.send_error(404)
@@ -142,6 +157,13 @@ class HealthHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != '/command':
             self.send_error(404)
+            return
+
+        expected_cn = self.__class__.expected_manager_cn
+        peer_cn = self._peer_cn()
+        if not expected_cn or peer_cn != expected_cn:
+            log.warning(f"/command rejected: peer CN '{peer_cn}' != expected '{expected_cn}'")
+            self._json_response(403, {'error': 'Caller is not the manager'})
             return
 
         content_length = int(self.headers.get('Content-Length', 0))
@@ -253,6 +275,17 @@ def start_health_server(config: dict, agent_state: dict):
     port = agent_cfg.get('health_port', 8444)
 
     HealthHandler.agent_state = agent_state
+
+    expected_cn = mgr_cfg.get('expected_cn')
+    if not expected_cn:
+        url = mgr_cfg.get('url', '')
+        host = url.split('://', 1)[-1].split('/', 1)[0].split(':', 1)[0]
+        expected_cn = host or None
+    HealthHandler.expected_manager_cn = expected_cn
+    if expected_cn:
+        log.info(f"/command endpoint will only accept manager CN '{expected_cn}'")
+    else:
+        log.warning("No manager CN configured — /command endpoint disabled for safety")
 
     try:
         subprocess.run(['docker', 'version'], capture_output=True, check=True, timeout=5)
