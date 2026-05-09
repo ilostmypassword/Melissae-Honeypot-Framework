@@ -138,17 +138,8 @@ export default function Dashboard() {
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
 
-      {/* Topology + Recent alerts side by side */}
+      {/* Recent alerts + Topology side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <AgentTopology
-            agents={agents}
-            logs={filteredLogs}
-            onModuleClick={(protocol, agentId) => navigate(
-              `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
-            )}
-          />
-        </div>
         <div className="glass-card p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -193,6 +184,15 @@ export default function Dashboard() {
               <div className="text-[10px] text-text-muted/70 mt-1">All systems quiet</div>
             </div>
           )}
+        </div>
+        <div className="lg:col-span-2">
+          <AgentTopology
+            agents={agents}
+            logs={filteredLogs}
+            onModuleClick={(protocol, agentId) => navigate(
+              `/search?q=${encodeURIComponent(`protocol:${protocol}`)}&agent=${encodeURIComponent(agentId)}`
+            )}
+          />
         </div>
       </div>
 

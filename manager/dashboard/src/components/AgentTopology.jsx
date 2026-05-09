@@ -10,7 +10,7 @@ const PROTOCOL_COLOR = {
 }
 
 const CANVAS_W = 1800
-const CANVAS_H = 720
+const CANVAS_H = 480
 
 const NODE_DIMS = {
   manager: { w: 240, h: 56, rx: 12, font: 14 },
