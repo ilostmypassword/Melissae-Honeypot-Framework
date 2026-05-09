@@ -186,7 +186,7 @@ export default function Dashboard() {
                 >
                   <SeverityTag severity={a.severity} />
                   <span className="text-xs font-semibold text-text-primary truncate flex-1 min-w-0">
-                    {a.rule_name ? `${a.rule_name}${a.rule_id ? ` (${a.rule_id})` : ''}` : a.rule_id}
+                    {a.rule_name ? `${a.rule_name}${a.rule_id ? ` [${a.rule_id}]` : ''}` : a.rule_id}
                   </span>
                   {a.ip && (
                     <code className="text-[10px] font-mono text-text-secondary shrink-0">{a.ip}</code>
