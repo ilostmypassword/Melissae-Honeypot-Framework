@@ -70,7 +70,7 @@ export default function Dashboard() {
     const ROW_HEIGHT = 36
     const compute = () => {
       const h = el.clientHeight
-      const n = Math.max(1, Math.floor(h / ROW_HEIGHT))
+      const n = Math.min(7, Math.max(1, Math.floor(h / ROW_HEIGHT)))
       setMaxVisibleAlerts(n)
     }
     compute()
@@ -155,8 +155,8 @@ export default function Dashboard() {
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
 
-      {/* Recent alerts + Topology side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+      {/* Recent alerts + Topology side by side - row sized for 7 alerts max */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch lg:h-[340px]">
         <div className="relative lg:min-h-0">
           <div className="glass-card p-4 flex flex-col lg:absolute lg:inset-0 overflow-hidden">
           <div className="flex items-center justify-between mb-3">
@@ -204,7 +204,7 @@ export default function Dashboard() {
           )}
           </div>
         </div>
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 lg:h-full">
           <AgentTopology
             agents={agents}
             logs={filteredLogs}

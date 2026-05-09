@@ -527,7 +527,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
   const cursor = isPanning ? 'grabbing' : draggingId ? 'grabbing' : 'grab'
 
   return (
-    <div className="glass-card p-5">
+    <div className="glass-card p-5 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="section-title flex items-center gap-2">
           <span className="relative flex h-2 w-2">
@@ -553,13 +553,13 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
           No active agents to display
         </div>
       ) : (
-        <div ref={wrapperRef} className="relative rounded-lg overflow-hidden border border-border bg-surface-tertiary/40">
+        <div ref={wrapperRef} className="relative rounded-lg overflow-hidden border border-border bg-surface-tertiary/40 flex-1 min-h-[240px]">
           <svg
             ref={svgRef}
             viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
             preserveAspectRatio="xMidYMid slice"
-            className="block w-full h-full select-none"
-            style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}`, cursor, touchAction: 'none' }}
+            className="block w-full h-full select-none absolute inset-0"
+            style={{ cursor, touchAction: 'none' }}
             onPointerDown={onPointerDownBackground}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
