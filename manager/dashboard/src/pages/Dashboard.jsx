@@ -156,8 +156,9 @@ export default function Dashboard() {
       </div>
 
       {/* Recent alerts + Topology side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="glass-card p-4 flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+        <div className="relative lg:min-h-0">
+          <div className="glass-card p-4 flex flex-col lg:absolute lg:inset-0 overflow-hidden">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
@@ -201,6 +202,7 @@ export default function Dashboard() {
               <div className="text-[10px] text-text-muted/70 mt-1">All systems quiet</div>
             </div>
           )}
+          </div>
         </div>
         <div className="lg:col-span-2">
           <AgentTopology
