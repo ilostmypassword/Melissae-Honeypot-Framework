@@ -162,10 +162,13 @@ export function Heatmap({ logs }) {
 // Protocol distribution doughnut
 export function ProtocolChart({ logs, onClick }) {
   const protocols = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
-  const counts = useMemo(
-    () => protocols.map(p => logs.filter(l => l.protocol === p).length),
-    [logs]
-  )
+  const counts = useMemo(() => {
+    const byProtocol = Object.fromEntries(protocols.map(p => [p, 0]))
+    for (const log of logs) {
+      if (log.protocol in byProtocol) byProtocol[log.protocol]++
+    }
+    return protocols.map(p => byProtocol[p])
+  }, [logs])
   const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af']
 
   return (
@@ -190,10 +193,13 @@ export function ProtocolChart({ logs, onClick }) {
 
 // Logs per agent bar chart
 export function AgentBarChart({ logs, agentIds, onAgentClick }) {
-  const counts = useMemo(
-    () => agentIds.map(id => logs.filter(l => l.agent_id === id).length),
-    [logs, agentIds]
-  )
+  const counts = useMemo(() => {
+    const byAgent = Object.fromEntries(agentIds.map(id => [id, 0]))
+    for (const log of logs) {
+      if (log.agent_id in byAgent) byAgent[log.agent_id]++
+    }
+    return agentIds.map(id => byAgent[id])
+  }, [logs, agentIds])
   const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af', '#818cf8', '#6ee7b7']
 
   return (

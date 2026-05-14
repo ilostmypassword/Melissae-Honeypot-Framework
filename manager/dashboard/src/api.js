@@ -6,8 +6,22 @@ export async function fetchLogs(opts = {}) {
   const params = new URLSearchParams()
   if (options.agent_id) params.set('agent_id', options.agent_id)
   if (options.log_id) params.set('log_id', options.log_id)
+  if (options.limit) params.set('limit', options.limit)
+  if (options.skip) params.set('skip', options.skip)
   const qs = params.toString()
   const res = await fetch(`${API_BASE}/logs${qs ? `?${qs}` : ''}`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
+// Fetch server-side aggregate counters for logs without loading every event
+export async function fetchLogStats(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v != null && v !== '') params.set(k, v)
+  }
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/logs/stats${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }
@@ -86,8 +100,13 @@ export async function fetchAlerts(filters = {}) {
 }
 
 // Fetch alert counts grouped by status (for the navbar badge)
-export async function fetchAlertCounts() {
-  const res = await fetch(`${API_BASE}/alerts/count`)
+export async function fetchAlertCounts(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v != null && v !== '') params.set(k, v)
+  }
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/alerts/count${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }

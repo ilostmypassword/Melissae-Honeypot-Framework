@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { fetchLogs, fetchAgents, fetchAlerts } from '../api'
+import { fetchLogs, fetchLogStats, fetchAgents, fetchAlerts } from '../api'
 import StatCard from '../components/StatCard'
 import { SeverityTag } from '../components/Tags'
 import { DailyChart, ProtocolChart } from '../components/charts'
@@ -18,6 +18,7 @@ const DATE_RANGES = [
 // Main dashboard page with stats and charts
 export default function Dashboard() {
   const [logs, setLogs] = useState([])
+  const [logStats, setLogStats] = useState(null)
   const [agents, setAgents] = useState([])
   const [recentAlerts, setRecentAlerts] = useState([])
   const [selectedAgent, setSelectedAgent] = useState('')
@@ -34,12 +35,14 @@ export default function Dashboard() {
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
     try {
-      const [logsData, agentsData, alertsData] = await Promise.all([
-        fetchLogs(),
+      const [logsData, statsData, agentsData, alertsData] = await Promise.all([
+        fetchLogs(selectedAgent ? { agent_id: selectedAgent } : {}),
+        fetchLogStats({ agent_id: selectedAgent, range: dateRange }).catch(() => null),
         fetchAgents().catch(() => []),
         fetchAlerts({ status: 'new', limit: 20 }).catch(() => []),
       ])
       setLogs(logsData)
+      setLogStats(statsData)
       setAgents(agentsData)
       setRecentAlerts(Array.isArray(alertsData) ? alertsData : [])
       setLastRefresh(Date.now())
@@ -49,7 +52,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedAgent, dateRange])
 
   useEffect(() => {
     loadData(true)
@@ -79,7 +82,11 @@ export default function Dashboard() {
     return () => ro.disconnect()
   }, [recentAlerts.length])
 
-  const agentIds = useMemo(() => [...new Set(logs.map(l => l.agent_id).filter(Boolean))].sort(), [logs])
+  const agentIds = useMemo(() => {
+    const fromAgents = agents.map(a => a.agent_id).filter(Boolean)
+    const ids = fromAgents.length > 0 ? fromAgents : logs.map(l => l.agent_id).filter(Boolean)
+    return [...new Set(ids)].sort()
+  }, [agents, logs])
 
   const dateFilteredLogs = useMemo(() => filterByDateRange(logs, dateRange), [logs, dateRange])
 
@@ -92,12 +99,12 @@ export default function Dashboard() {
     navigate(`/search?q=${encodeURIComponent(term)}${agentParam}`)
   }
 
+  const s = logStats || computeStats(filteredLogs)
+  const prevS = useMemo(() => computeTrend(logs, selectedAgent), [logs, selectedAgent])
+  const healthyAgents = agents.filter(a => a.status === 'healthy').length
+
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
-
-  const s = computeStats(filteredLogs)
-  const prevS = computeTrend(logs, selectedAgent)
-  const healthyAgents = agents.filter(a => a.status === 'healthy').length
 
   return (
     <div className="space-y-6 animate-fade-in">
