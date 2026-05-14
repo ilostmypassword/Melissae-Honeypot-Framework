@@ -606,8 +606,8 @@ def api_alerts():
         db = get_db()
         try:
             query = _build_alert_query(request.args)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except ValueError:
+            return jsonify({"error": "Invalid query parameters"}), 400
 
         try:
             limit = max(1, min(int(request.args.get("limit", 500)), MAX_RESULTS_ALERTS))
