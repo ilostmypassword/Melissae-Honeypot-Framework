@@ -2,6 +2,11 @@ import { useMemo } from 'react'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
 import { formatNumber, getLogDateKey, getLogHourKey } from '../utils'
 
+const CHART_ACCENT = '#7f8ea3'
+const CHART_GRID = '#1f2935'
+const CHART_TEXT = '#727d8b'
+const PROTOCOL_COLORS = ['#6f96ad', '#b18aa0', '#8fa88f', '#958bb0', '#b59a75', '#ad8582']
+
 // Daily event count line chart
 export function DailyChart({ logs, onDayClick }) {
   const { labels, data, fullDates } = useMemo(() => {
@@ -39,14 +44,14 @@ export function DailyChart({ logs, onDayClick }) {
         datasets: [{
           label: 'Logs',
           data,
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.06)',
+          borderColor: CHART_ACCENT,
+          backgroundColor: 'rgba(127, 142, 163, 0.07)',
           borderWidth: 2,
           fill: true,
           tension: 0.4,
           pointRadius: data.length > 30 ? 0 : 3,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#111820',
+          pointBackgroundColor: CHART_ACCENT,
+          pointBorderColor: '#0a0e13',
           pointBorderWidth: 2,
           pointHoverRadius: 5,
         }],
@@ -58,8 +63,8 @@ export function DailyChart({ logs, onDayClick }) {
           if (elements.length > 0 && onDayClick) onDayClick(fullDates[elements[0].index])
         },
         scales: {
-          y: { beginAtZero: true, grid: { color: '#151d28' }, ticks: { color: '#5a6370' } },
-          x: { grid: { display: false }, ticks: { color: '#5a6370', maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
+          y: { beginAtZero: true, grid: { color: CHART_GRID }, ticks: { color: CHART_TEXT } },
+          x: { grid: { display: false }, ticks: { color: CHART_TEXT, maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
         },
         plugins: { legend: { display: false } },
       }}
@@ -85,8 +90,8 @@ export function ActivityChart({ logs, onHourClick }) {
         labels: hours,
         datasets: [{
           data,
-          backgroundColor: 'rgba(99, 102, 241, 0.20)',
-          borderColor: '#6366f1',
+          backgroundColor: 'rgba(127, 142, 163, 0.20)',
+          borderColor: CHART_ACCENT,
           borderWidth: 1,
           borderRadius: 4,
         }],
@@ -98,8 +103,8 @@ export function ActivityChart({ logs, onHourClick }) {
           if (elements.length > 0 && onHourClick) onHourClick(String(elements[0].index).padStart(2, '0'))
         },
         scales: {
-          y: { beginAtZero: true, grid: { color: '#151d28' }, ticks: { color: '#5a6370' } },
-          x: { grid: { display: false }, ticks: { color: '#5a6370' } },
+          y: { beginAtZero: true, grid: { color: CHART_GRID }, ticks: { color: CHART_TEXT } },
+          x: { grid: { display: false }, ticks: { color: CHART_TEXT } },
         },
         plugins: { legend: { display: false } },
       }}
@@ -146,7 +151,7 @@ export function Heatmap({ logs }) {
                   <div
                     key={h}
                     className="flex-1 h-[18px] rounded-[2px] transition-colors"
-                    style={{ backgroundColor: val === 0 ? 'rgba(255,255,255,0.02)' : `rgba(99, 102, 241, ${0.12 + intensity * 0.65})` }}
+                    style={{ backgroundColor: val === 0 ? 'rgba(255,255,255,0.018)' : `rgba(127, 142, 163, ${0.10 + intensity * 0.46})` }}
                     title={`${days[dow]} ${String(h).padStart(2, '0')}:00 — ${val} logs`}
                   />
                 )
@@ -169,13 +174,13 @@ export function ProtocolChart({ logs, onClick }) {
     }
     return protocols.map(p => byProtocol[p])
   }, [logs])
-  const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af']
+  const colors = PROTOCOL_COLORS
 
   return (
     <Doughnut
       data={{
         labels: protocols.map(p => p.toUpperCase()),
-        datasets: [{ data: counts, backgroundColor: colors, borderColor: '#111820', borderWidth: 2 }],
+        datasets: [{ data: counts, backgroundColor: colors, borderColor: '#0a0e13', borderWidth: 2 }],
       }}
       options={{
         responsive: true,
@@ -183,7 +188,7 @@ export function ProtocolChart({ logs, onClick }) {
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { padding: 10, color: '#5a6370', font: { size: 10, weight: '500' }, usePointStyle: true, pointStyle: 'circle' },
+            labels: { padding: 10, color: CHART_TEXT, font: { size: 10, weight: '500' }, usePointStyle: true, pointStyle: 'circle' },
           },
         },
       }}
@@ -200,7 +205,7 @@ export function AgentBarChart({ logs, agentIds, onAgentClick }) {
     }
     return agentIds.map(id => byAgent[id])
   }, [logs, agentIds])
-  const colors = ['#38bdf8', '#f9a8d4', '#86efac', '#a78bfa', '#fdba74', '#fda4af', '#818cf8', '#6ee7b7']
+  const colors = [...PROTOCOL_COLORS, '#8996aa', '#7f9b91']
 
   return (
     <Bar
@@ -219,8 +224,8 @@ export function AgentBarChart({ logs, agentIds, onAgentClick }) {
         maintainAspectRatio: false,
         onClick: (_, elements) => { if (elements.length > 0 && onAgentClick) onAgentClick(agentIds[elements[0].index]) },
         scales: {
-          y: { beginAtZero: true, grid: { color: '#151d28' }, ticks: { color: '#5a6370' } },
-          x: { grid: { display: false }, ticks: { color: '#5a6370', font: { size: 11 } } },
+          y: { beginAtZero: true, grid: { color: CHART_GRID }, ticks: { color: CHART_TEXT } },
+          x: { grid: { display: false }, ticks: { color: CHART_TEXT, font: { size: 11 } } },
         },
         plugins: { legend: { display: false } },
       }}
@@ -256,7 +261,7 @@ export function TopAttackersList({ logs, geoData = {}, onIPClick, limit = 10 }) 
             )}
             <code className="text-xs font-mono text-accent group-hover:text-accent-hover w-[120px] text-left shrink-0">{ip}</code>
             <div className="flex-1 bg-surface-tertiary rounded-full h-2 overflow-hidden">
-              <div className="bg-red-500/60 h-full rounded-full transition-all" style={{ width: `${(count / max) * 100}%` }} />
+              <div className="bg-verdict-malicious/55 h-full rounded-full transition-all" style={{ width: `${(count / max) * 100}%` }} />
             </div>
             <span className="text-xs font-mono text-text-secondary w-[50px] text-right shrink-0">{formatNumber(count)}</span>
           </button>
@@ -288,7 +293,7 @@ export function TopCredentials({ logs, limit = 10 }) {
         <div key={user} className="flex items-center gap-3 py-1">
           <code className="text-xs font-mono text-text-primary w-[140px] truncate shrink-0">{user}</code>
           <div className="flex-1 bg-surface-tertiary rounded-full h-1.5 overflow-hidden">
-            <div className="bg-amber-500/50 h-full rounded-full" style={{ width: `${(count / max) * 100}%` }} />
+            <div className="bg-verdict-suspicious/50 h-full rounded-full" style={{ width: `${(count / max) * 100}%` }} />
           </div>
           <span className="text-xs font-mono text-text-muted w-[40px] text-right shrink-0">{count}</span>
         </div>
@@ -299,7 +304,7 @@ export function TopCredentials({ logs, limit = 10 }) {
 
 // Per-protocol daily activity (multi-line)
 const _PROTO_LIST = ['ssh', 'ftp', 'http', 'modbus', 'mqtt', 'telnet']
-const _PROTO_COLORS = { ssh: '#38bdf8', ftp: '#f9a8d4', http: '#86efac', modbus: '#a78bfa', mqtt: '#fdba74', telnet: '#fda4af' }
+const _PROTO_COLORS = { ssh: '#6f96ad', ftp: '#b18aa0', http: '#8fa88f', modbus: '#958bb0', mqtt: '#b59a75', telnet: '#ad8582' }
 
 export function ProtocolTimelineChart({ logs }) {
   const { labels, datasets } = useMemo(() => {
@@ -349,11 +354,11 @@ export function ProtocolTimelineChart({ logs }) {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          y: { beginAtZero: true, grid: { color: '#151d28' }, ticks: { color: '#5a6370' } },
-          x: { grid: { display: false }, ticks: { color: '#5a6370', maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
+          y: { beginAtZero: true, grid: { color: CHART_GRID }, ticks: { color: CHART_TEXT } },
+          x: { grid: { display: false }, ticks: { color: CHART_TEXT, maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
         },
         plugins: {
-          legend: { position: 'bottom', labels: { padding: 8, color: '#5a6370', font: { size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
+          legend: { position: 'bottom', labels: { padding: 8, color: CHART_TEXT, font: { size: 10 }, usePointStyle: true, pointStyle: 'circle' } },
         },
       }}
     />
@@ -361,7 +366,7 @@ export function ProtocolTimelineChart({ logs }) {
 }
 
 // Generic top-N ranked list (fieldFn extracts the value to rank from a log)
-export function TopHTTPTable({ logs, fieldFn, emptyLabel = 'data', accent = '#6366f1', onItemClick, limit = 10 }) {
+export function TopHTTPTable({ logs, fieldFn, emptyLabel = 'data', accent = CHART_ACCENT, onItemClick, limit = 10 }) {
   const sorted = useMemo(() => {
     const counts = {}
     for (const l of logs) {
