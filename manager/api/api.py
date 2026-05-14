@@ -628,8 +628,8 @@ def api_alerts_count():
         db = get_db()
         try:
             query = _build_alert_query(request.args)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except ValueError:
+            return jsonify({"error": "Invalid alert filter parameters"}), 400
 
         out = {
             "new": 0,
