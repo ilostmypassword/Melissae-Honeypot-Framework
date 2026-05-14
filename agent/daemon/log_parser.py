@@ -558,7 +558,9 @@ def parse_activemq_runtime(logs_dir: str, file_states: Dict) -> List[Dict]:
         # Drop noisy / non-actionable events
         if event_type in ('monitor_start', 'process_observed'):
             continue
-        ip = event.get('ip') or '127.0.0.1'
+        ip = event.get('ip') or ''
+        if not ip or ip in ('127.0.0.1', '::1', '0.0.0.0'):
+            continue
         command = event.get('command')
         path = event.get('path') or event.get('remote') or event.get('source')
 
