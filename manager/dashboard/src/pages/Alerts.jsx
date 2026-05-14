@@ -134,6 +134,49 @@ function formatRange(first, last) {
   return `${formatTime(first)} → ${formatTime(last)}`
 }
 
+function normalizeMql(query) {
+  return String(query || '').trim().replace(/\s+/g, ' ')
+}
+
+function buildRuleIpQuery(ruleMql, ip) {
+  const cleanRule = normalizeMql(ruleMql)
+  const cleanIp = String(ip || '').trim()
+  if (cleanRule && cleanIp) return `(${cleanRule}) AND ip:${cleanIp}`
+  if (cleanRule) return cleanRule
+  if (cleanIp) return `ip:${cleanIp}`
+  return ''
+}
+
+function fallbackAlertQuery(alert) {
+  const log = alert?.log || {}
+  const parts = []
+  const agentId = alert?.agent_id || log.agent_id
+  if (agentId) parts.push(`agent_id:${agentId}`)
+  if (alert?.ip || log.ip) parts.push(`ip:${alert.ip || log.ip}`)
+  if (alert?.protocol || log.protocol) parts.push(`protocol:${alert.protocol || log.protocol}`)
+  if (log.date) parts.push(`date:${log.date}`)
+  if (log.action && !/\b(AND|OR)\b/i.test(log.action)) {
+    parts.push(`action:${log.action}`)
+  }
+  return parts.join(' AND ')
+}
+
+function alertSearchQuery(alert) {
+  if (!alert) return ''
+  return buildRuleIpQuery(alert.rule_mql, alert.ip || alert.log?.ip) || fallbackAlertQuery(alert)
+}
+
+function groupSearchQuery(group) {
+  if (!group) return ''
+  const ruleMql = group.rule_mql || group.members?.[0]?.rule_mql
+  const query = buildRuleIpQuery(ruleMql, group.ip)
+  if (query) return query
+  const parts = []
+  if (group.ip) parts.push(`ip:${group.ip}`)
+  if (group.protocol) parts.push(`protocol:${group.protocol}`)
+  return parts.join(' AND ')
+}
+
 // Alerts backlog page
 export default function Alerts() {
   const navigate = useNavigate()
@@ -192,6 +235,22 @@ export default function Alerts() {
 
   const groups = useMemo(() => buildGroups(alerts), [alerts])
 
+  useEffect(() => {
+    const visibleIds = new Set(alerts.map(a => a._id))
+    setSelected(prev => {
+      const next = new Set([...prev].filter(id => visibleIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [alerts])
+
+  useEffect(() => {
+    const visibleGroupKeys = new Set(groups.map(g => g.key))
+    setExpanded(prev => {
+      const next = new Set([...prev].filter(key => visibleGroupKeys.has(key)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [groups])
+
   const stats = useMemo(() => ({
     total:        alerts.length,
     groups:       groups.length,
@@ -219,11 +278,12 @@ export default function Alerts() {
     })
   }
   const toggleAllFlat = () => {
-    setSelected(prev => prev.size === alerts.length ? new Set() : new Set(alerts.map(a => a._id)))
+    const visibleIds = alerts.map(a => a._id)
+    setSelected(prev => visibleIds.length > 0 && visibleIds.every(id => prev.has(id)) ? new Set() : new Set(visibleIds))
   }
   const toggleAllGroups = () => {
     const allIds = groups.flatMap(g => g.ids)
-    setSelected(prev => prev.size === allIds.length ? new Set() : new Set(allIds))
+    setSelected(prev => allIds.length > 0 && allIds.every(id => prev.has(id)) ? new Set() : new Set(allIds))
   }
   const toggleExpanded = key => {
     setExpanded(prev => {
@@ -270,46 +330,18 @@ export default function Alerts() {
     )
   }
 
-  const groupedSelectedAll = selected.size > 0 && selected.size === groups.flatMap(g => g.ids).length
-  const flatSelectedAll = selected.size > 0 && selected.size === alerts.length
+  const groupedIds = groups.flatMap(g => g.ids)
+  const groupedSelectedAll = groupedIds.length > 0 && groupedIds.every(id => selected.has(id))
+  const flatSelectedAll = alerts.length > 0 && alerts.every(a => selected.has(a._id))
 
   const navigateLogsForAlert = alert => {
-    if (!alert) return
-    const ruleMql = (alert.rule_mql || '').trim()
-    if (ruleMql) {
-      navigate(`/search?q=${encodeURIComponent(ruleMql)}`)
-      return
-    }
-    if (alert.log_id) {
-      navigate(`/search?log_id=${encodeURIComponent(alert.log_id)}`)
-      return
-    }
-    const log = alert.log || {}
-    const parts = []
-    const agentId = alert.agent_id || log.agent_id
-    if (agentId) parts.push(`agent_id:${agentId}`)
-    if (alert.ip || log.ip) parts.push(`ip:${alert.ip || log.ip}`)
-    if (alert.protocol || log.protocol) parts.push(`protocol:${alert.protocol || log.protocol}`)
-    if (log.date) parts.push(`date:${log.date}`)
-    if (log.action && !/\b(AND|OR)\b/i.test(log.action)) {
-      parts.push(`action:${log.action}`)
-    }
-    if (parts.length === 0) return
-    navigate(`/search?q=${encodeURIComponent(parts.join(' AND '))}`)
+    const query = alertSearchQuery(alert)
+    if (query) navigate(`/search?q=${encodeURIComponent(query)}`)
   }
 
   const navigateLogsForGroup = group => {
-    if (!group) return
-    const ruleMql = (group.rule_mql || group.members?.[0]?.rule_mql || '').trim()
-    if (ruleMql) {
-      navigate(`/search?q=${encodeURIComponent(ruleMql)}`)
-      return
-    }
-    const parts = []
-    if (group.ip) parts.push(`ip:${group.ip}`)
-    if (group.protocol) parts.push(`protocol:${group.protocol}`)
-    if (parts.length === 0) return
-    navigate(`/search?q=${encodeURIComponent(parts.join(' AND '))}`)
+    const query = groupSearchQuery(group)
+    if (query) navigate(`/search?q=${encodeURIComponent(query)}`)
   }
 
   return (
