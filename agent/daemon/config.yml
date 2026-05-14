@@ -16,11 +16,11 @@ push:
   retry_max_seconds: 300
 
 buffer:
-  db_path: "../data/buffer.db"
+  db_path: "/var/lib/melissae/buffer.db"
   max_size_mb: 512
 
-logs_dir: "../logs"
-state_path: "../data/parser_state.json"
+logs_dir: "/logs"
+state_path: "/var/lib/melissae/parser_state.json"
 
 modules:
   ssh:
@@ -44,7 +44,4 @@ modules:
   cve-2026-24061:
     enabled: false
     log_path: "cve/CVE-2026-24061/auth.log"
-  cve-2026-34197:
-    enabled: false
-    log_path: "cve/CVE-2026-34197/access.log"
 
