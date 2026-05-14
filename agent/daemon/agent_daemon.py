@@ -396,7 +396,7 @@ def main():
         'agent_id': agent_id,
         'status': 'healthy',
         'uptime_seconds': 0,
-        'version': '2.2',
+        'version': '2.5',
         'modules': [],
         'buffer': {'pending_logs': 0, 'oldest_pending': None},
         'last_push': None,
