@@ -150,28 +150,6 @@ services:
     networks:
       - cve_isolated
 
-  melissae_cve_2026_34197_monitor:
-    build:
-      context: ../modules/cve/CVE-2026-34197
-      dockerfile: Dockerfile.monitor
-    container_name: melissae_cve_2026_34197_monitor
-    restart: unless-stopped
-    depends_on:
-      - melissae_cve_2026_34197_broker
-    pid: "service:melissae_cve_2026_34197_broker"
-    network_mode: "service:melissae_cve_2026_34197_broker"
-    volumes:
-      - ./logs/cve/CVE-2026-34197:/host-logs/activemq
-      - ./logs/cve/CVE-2026-34197/activemq-data:/broker-data:ro
-    environment:
-      - MELISSAE_LOG_DIR=/host-logs/activemq
-      - ACTIVEMQ_DATA_DIR=/broker-data
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 128m
-    cpus: 0.25
-
   melissae_cve_2026_34197:
     build:
       context: ../modules/cve/CVE-2026-34197
@@ -184,7 +162,6 @@ services:
       - ./logs/cve/CVE-2026-34197:/host-logs/activemq
     depends_on:
       - melissae_cve_2026_34197_broker
-      - melissae_cve_2026_34197_monitor
     cap_drop:
       - ALL
     cap_add:
