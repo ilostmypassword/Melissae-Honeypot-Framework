@@ -130,6 +130,78 @@ services:
     sysctls:
       - net.ipv4.ip_unprivileged_port_start=0
 
+  melissae_cve_2026_34197_broker:
+    image: apache/activemq-classic:5.18.6
+    container_name: melissae_cve_2026_34197_broker
+    restart: unless-stopped
+    environment:
+      - ACTIVEMQ_WEB_ADMIN_PASSWORD=admin
+    expose:
+      - "8161"
+    ports:
+      - "61616:61616"
+    volumes:
+      - ./logs/cve/CVE-2026-34197/activemq-data:/opt/apache-activemq/data
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 768m
+    cpus: 1.0
+    networks:
+      - cve_isolated
+
+  melissae_cve_2026_34197_monitor:
+    build:
+      context: ../modules/cve/CVE-2026-34197
+      dockerfile: Dockerfile.monitor
+    container_name: melissae_cve_2026_34197_monitor
+    restart: unless-stopped
+    depends_on:
+      - melissae_cve_2026_34197_broker
+    pid: "service:melissae_cve_2026_34197_broker"
+    network_mode: "service:melissae_cve_2026_34197_broker"
+    volumes:
+      - ./logs/cve/CVE-2026-34197:/host-logs/activemq
+      - ./logs/cve/CVE-2026-34197/activemq-data:/broker-data:ro
+    environment:
+      - MELISSAE_LOG_DIR=/host-logs/activemq
+      - ACTIVEMQ_DATA_DIR=/broker-data
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 128m
+    cpus: 0.25
+
+  melissae_cve_2026_34197:
+    build:
+      context: ../modules/cve/CVE-2026-34197
+      dockerfile: Dockerfile
+    container_name: melissae_cve_2026_34197
+    restart: unless-stopped
+    ports:
+      - "8161:8161"
+    volumes:
+      - ./logs/cve/CVE-2026-34197:/host-logs/activemq
+    depends_on:
+      - melissae_cve_2026_34197_broker
+      - melissae_cve_2026_34197_monitor
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=8m
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    networks:
+      - cve_isolated
+
 networks:
   cve_isolated:
     driver: bridge

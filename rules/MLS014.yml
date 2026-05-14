@@ -1,0 +1,16 @@
+id: MLS014
+name: ActiveMQ CVE-2026-34197 runtime RCE telemetry
+description: >
+  Runtime activity observed inside the ActiveMQ CVE-2026-34197 honeypot after
+  Jolokia exploitation attempts, including unexpected child processes, outbound
+  connections, temporary files, or broker log indicators.
+severity: critical
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 1m
+mql: 'cve:CVE-2026-34197 AND action:RCE'
+group_by: ip
+threshold: 1
+score: 95
+tags: [exploitation, cve, activemq, jolokia, rce, post-exploitation]
+mitre: [T1059, T1105]

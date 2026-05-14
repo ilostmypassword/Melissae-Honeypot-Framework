@@ -1,0 +1,16 @@
+id: MLS013
+name: ActiveMQ Jolokia CVE-2026-34197 activity
+description: >
+  Access to the ActiveMQ Classic Jolokia endpoint exposed by the CVE-2026-34197
+  honeypot module. Authenticated Jolokia MBean operations are the exploitation
+  path described in GHSA-rxpj-7qvf-xv32.
+severity: critical
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 1m
+mql: 'cve:CVE-2026-34197 AND path:jolokia'
+group_by: ip
+threshold: 1
+score: 85
+tags: [exploitation, cve, activemq, jolokia]
+mitre: [T1190]
