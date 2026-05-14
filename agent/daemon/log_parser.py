@@ -87,6 +87,17 @@ PATTERNS = {
     'telnet_cve_2026_24061_commands': {
         'source': 'cve/CVE-2026-24061/commands.log',
         'pattern': re.compile(r'(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<ip>\d+\.\d+\.\d+\.\d+) \| (?P<user>\S+) \| (?P<command>.+)')
+    },
+    'activemq_cve_2026_34197': {
+        'source': 'cve/CVE-2026-34197/access.log',
+        'pattern': re.compile(
+            r'^(?P<ip>\S+)\s+-\s+(?P<user>\S+)\s+\[(?P<date>[^\]]+)\]\s+'
+            r'"(?P<method>[A-Z]+)\s+(?P<path>\S+)(?:\s+HTTP/[0-9.]+)?"\s+'
+            r'(?P<status>\d{3})\s+\S+\s+"[^"]*"\s+"(?P<user_agent>[^"]*)"'
+        )
+    },
+    'activemq_cve_2026_34197_runtime': {
+        'source': 'cve/CVE-2026-34197/runtime.jsonl'
     }
 }
 
@@ -475,6 +486,99 @@ def parse_telnet_cve_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
             logs.append(create_entry('telnet', dt, match.group('ip'), cleaned, user=match.group('user')))
     return logs
 
+# Parse ActiveMQ CVE-2026-34197 web console/Jolokia access logs
+def parse_activemq_cve(logs_dir: str, file_states: Dict) -> List[Dict]:
+    logs = []
+    source = os.path.join(logs_dir, PATTERNS['activemq_cve_2026_34197']['source'])
+    pattern = PATTERNS['activemq_cve_2026_34197']['pattern']
+    for line in read_new_lines(source, file_states):
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+
+        try:
+            dt = datetime.strptime(match.group('date'), "%d/%b/%Y:%H:%M:%S %z")
+        except ValueError:
+            continue
+
+        method = match.group('method')
+        path = match.group('path')
+        status = match.group('status')
+        user = match.group('user')
+        user_agent = match.group('user_agent') or None
+        path_l = path.lower()
+        line_l = line.lower()
+
+        if '/api/jolokia' in path_l:
+            action = f"Jolokia MBean request ({method}, HTTP {status})"
+            if 'addnetworkconnector' in line_l:
+                action = f"{action} with addNetworkConnector"
+            if 'brokerconfig=xbean:http' in line_l or 'brokerconfig=xbean:https' in line_l:
+                action = f"{action} and remote xbean brokerConfig"
+            if 'vm://' in line_l:
+                action = f"{action} via vm transport"
+        elif '/admin' in path_l:
+            action = f"ActiveMQ web console request ({method}, HTTP {status})"
+        else:
+            action = f"ActiveMQ HTTP request ({method}, HTTP {status})"
+
+        logs.append(create_entry(
+            'http',
+            dt,
+            match.group('ip'),
+            action,
+            path=path,
+            user_agent=user_agent,
+            user=user if user != '-' else None,
+            cve='CVE-2026-34197',
+        ))
+    return logs
+
+# Parse ActiveMQ CVE-2026-34197 runtime telemetry emitted by the monitor sidecar
+def parse_activemq_runtime(logs_dir: str, file_states: Dict) -> List[Dict]:
+    logs = []
+    source = os.path.join(logs_dir, PATTERNS['activemq_cve_2026_34197_runtime']['source'])
+    for line in read_new_lines(source, file_states):
+        try:
+            event = json.loads(line)
+            dt = parse_iso8601_ts(event.get('timestamp'))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+
+        event_type = event.get('event', 'runtime_event')
+        ip = event.get('ip') or '127.0.0.1'
+        command = event.get('command')
+        path = event.get('path') or event.get('remote') or event.get('source')
+
+        if event_type == 'process_start':
+            action = f"RCE runtime process started: {command or 'unknown command'}"
+        elif event_type == 'process_observed':
+            action = f"Runtime process observed: {command or 'unknown command'}"
+        elif event_type == 'outbound_connection':
+            action = f"RCE runtime outbound connection to {event.get('remote', 'unknown remote')}"
+            if command:
+                action = f"{action} from {command}"
+        elif event_type == 'file_created':
+            action = f"RCE runtime file created: {path or 'unknown path'}"
+        elif event_type == 'file_modified':
+            action = f"RCE runtime file modified: {path or 'unknown path'}"
+        elif event_type == 'broker_ioc':
+            action = f"ActiveMQ broker RCE indicator: {event.get('indicator', 'unknown indicator')}"
+        elif event_type == 'monitor_start':
+            action = "ActiveMQ runtime monitor started"
+        else:
+            action = f"ActiveMQ runtime event: {event_type}"
+
+        logs.append(create_entry(
+            'http',
+            dt,
+            ip,
+            action[:1000],
+            path=path,
+            cve='CVE-2026-34197',
+        ))
+    return logs
+
 MODULE_PARSERS = {
     'ssh':             [parse_ssh_auth, parse_ssh_commands],
     'ftp':             [parse_ftp],
@@ -483,6 +587,7 @@ MODULE_PARSERS = {
     'mqtt':            [parse_mqtt],
     'telnet':          [parse_telnet, parse_telnet_commands],
     'cve-2026-24061':  [parse_telnet_cve, parse_telnet_cve_commands],
+    'cve-2026-34197':  [parse_activemq_cve, parse_activemq_runtime],
 }
 
 _NEEDS_PID_MAP = {parse_telnet, parse_telnet_cve}

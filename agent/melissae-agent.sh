@@ -101,6 +101,7 @@ MODULE_REGISTRY=(
     "mqtt|melissae_mqtt|1883|MQTT Broker Honeypot"
     "telnet|melissae_telnet|23|Telnet Honeypot"
     "cve-2026-24061|melissae_cve_2026_24061|23|CVE-2026-24061 Telnet Auth Bypass"
+    "cve-2026-34197|melissae_cve_2026_34197|8161|CVE-2026-34197 ActiveMQ Jolokia RCE"
 )
 
 # Get a field value from a module registry entry
@@ -334,6 +335,9 @@ modules:
   cve-2026-24061:
     enabled: false
     log_path: "cve/CVE-2026-24061/auth.log"
+    cve-2026-34197:
+        enabled: false
+        log_path: "cve/CVE-2026-34197/access.log"
 CFGEOF
     success "Config written: $CONFIG_FILE"
 
@@ -557,7 +561,7 @@ cmd_start() {
             return 1
         fi
 
-        mkdir -p "$LOGS_DIR"/{ssh,ftp,web,modbus,mqtt,telnet,cve/CVE-2026-24061}
+        mkdir -p "$LOGS_DIR"/{ssh,ftp,web,modbus,mqtt,telnet,cve/CVE-2026-24061,cve/CVE-2026-34197}
 
         local services=()
         for entry in "${MODULE_REGISTRY[@]}"; do
@@ -565,6 +569,8 @@ cmd_start() {
             if _mod_enabled "$name"; then
                 if [ "$name" = "http" ]; then
                     services+=(melissae_apache1 melissae_apache2 melissae_proxy)
+                elif [ "$name" = "cve-2026-34197" ]; then
+                    services+=(melissae_cve_2026_34197_broker melissae_cve_2026_34197_monitor melissae_cve_2026_34197)
                 else
                     services+=("$service")
                 fi
@@ -591,6 +597,8 @@ cmd_start() {
         info "Starting $target..."
         if [ "$target" = "http" ]; then
             "${compose_cmd[@]}" up --detach --quiet-pull melissae_apache1 melissae_apache2 melissae_proxy 2>&1
+        elif [ "$target" = "cve-2026-34197" ]; then
+            "${compose_cmd[@]}" up --detach --quiet-pull melissae_cve_2026_34197_broker melissae_cve_2026_34197_monitor melissae_cve_2026_34197 2>&1
         else
             "${compose_cmd[@]}" up --detach --quiet-pull "$service" 2>&1
         fi
@@ -618,6 +626,8 @@ cmd_stop() {
         info "Stopping $target..."
         if [ "$target" = "http" ]; then
             "${compose_cmd[@]}" stop melissae_apache1 melissae_apache2 melissae_proxy 2>/dev/null
+        elif [ "$target" = "cve-2026-34197" ]; then
+            "${compose_cmd[@]}" stop melissae_cve_2026_34197 melissae_cve_2026_34197_monitor melissae_cve_2026_34197_broker 2>/dev/null
         else
             "${compose_cmd[@]}" stop "$service" 2>/dev/null
         fi
@@ -768,7 +778,7 @@ cmd_test_connection() {
 cmd_logs() {
     if [ $# -eq 0 ]; then
         warn "Usage: logs <module> [count]"
-        echo -e "${DIM}  Modules: ssh, ftp, http, modbus, mqtt, telnet${RESET}"
+        echo -e "${DIM}  Modules: ssh, ftp, http, modbus, mqtt, telnet, cve-2026-24061, cve-2026-34197${RESET}"
         return 1
     fi
     local module="$1"
@@ -783,6 +793,7 @@ cmd_logs() {
         mqtt)             log_file="mqtt/mosquitto.log" ;;
         telnet)           log_file="telnet/auth.log" ;;
         cve-2026-24061)   log_file="cve/CVE-2026-24061/auth.log" ;;
+        cve-2026-34197)   log_file="cve/CVE-2026-34197/runtime.jsonl" ;;
         *)                error "Unknown module: $module"; echo -e "${DIM}  Use 'list' to see available modules${RESET}"; return 1 ;;
     esac
 
