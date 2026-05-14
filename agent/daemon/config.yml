@@ -16,11 +16,11 @@ push:
   retry_max_seconds: 300
 
 buffer:
-  db_path: "/var/lib/melissae/buffer.db"
+  db_path: "../data/buffer.db"
   max_size_mb: 512
 
-logs_dir: "/logs"
-state_path: "/var/lib/melissae/parser_state.json"
+logs_dir: "../logs"
+state_path: "../data/parser_state.json"
 
 modules:
   ssh:
