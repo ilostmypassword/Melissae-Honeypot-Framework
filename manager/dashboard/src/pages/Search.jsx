@@ -5,6 +5,7 @@ import { searchLogs } from '../search'
 import { ProtocolTag } from '../components/Tags'
 import DataTable from '../components/DataTable'
 import { downloadJson } from '../stix'
+import { formatLogTimestampUTC } from '../utils'
 
 // Log search page with MQL query support
 export default function Search() {
@@ -84,8 +85,7 @@ export default function Search() {
     const base = [
       { key: 'agent_id', label: 'Agent' },
       { key: 'protocol', label: 'Protocol' },
-      { key: 'date', label: 'Date' },
-      { key: 'hour', label: 'Hour' },
+      { key: 'timestamp', label: 'Timestamp (UTC)' },
       { key: 'ip', label: 'IP' },
     ]
     const optional = [
@@ -113,10 +113,9 @@ export default function Search() {
         )
       case 'protocol':
         return <ProtocolTag protocol={value} />
-      case 'date':
-      case 'hour':
+      case 'timestamp':
         return (
-          <code className="text-xs font-mono text-text-secondary">{value}</code>
+          <code className="text-xs font-mono text-text-secondary">{formatLogTimestampUTC(row)}</code>
         )
       case 'ip':
         return (

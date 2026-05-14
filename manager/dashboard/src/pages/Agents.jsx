@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchAgents } from '../api'
+import { formatTimestampUTC, parseTimestampValue } from '../utils'
 
 const REFRESH_INTERVAL = 15_000
 
@@ -21,13 +22,8 @@ const statusText = {
 
 function formatTime(val) {
   if (!val || val === 'never') return '—'
-  try {
-    const d = new Date(val)
-    if (isNaN(d)) return val
-    return d.toLocaleString()
-  } catch {
-    return val
-  }
+  const parsed = parseTimestampValue(val)
+  return parsed ? formatTimestampUTC(parsed.toISOString()) : val
 }
 
 // Registered agents list with health status

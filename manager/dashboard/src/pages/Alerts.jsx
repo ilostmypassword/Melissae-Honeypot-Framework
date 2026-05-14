@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchAlerts, updateAlertStatus, updateAlertsBulk } from '../api'
 import { SeverityTag, AlertStatusTag, ProtocolTag } from '../components/Tags'
+import { formatTimestampUTC, parseTimestampValue, sameUTCDate, timestampToMs } from '../utils'
 
 const REFRESH_INTERVAL = 20_000
 const STATUS_FILTERS = [
@@ -31,8 +32,21 @@ function sortAlerts(list) {
     const aNew = a.status === 'new' ? 0 : 1
     const bNew = b.status === 'new' ? 0 : 1
     if (aNew !== bNew) return aNew - bNew
-    return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    return compareTimeDesc(a.created_at, b.created_at)
   })
+}
+
+function compareTimeAsc(a, b) {
+  const ta = timestampToMs(a)
+  const tb = timestampToMs(b)
+  if (Number.isFinite(ta) && Number.isFinite(tb)) return ta - tb
+  if (Number.isFinite(ta)) return -1
+  if (Number.isFinite(tb)) return 1
+  return String(a || '').localeCompare(String(b || ''))
+}
+
+function compareTimeDesc(a, b) {
+  return -compareTimeAsc(a, b)
 }
 
 // Aggregate alerts by (rule_id, ip).
@@ -66,21 +80,19 @@ function buildGroups(list) {
       g.severity = a.severity
     }
     if (g.protocol && a.protocol && a.protocol !== g.protocol) g.protocol = null
-    if (String(a.created_at || '') < String(g.first_seen || '')) g.first_seen = a.created_at
-    if (String(a.created_at || '') > String(g.last_seen || '')) g.last_seen = a.created_at
+    if (compareTimeAsc(a.created_at, g.first_seen) < 0) g.first_seen = a.created_at
+    if (compareTimeAsc(a.created_at, g.last_seen) > 0) g.last_seen = a.created_at
   }
   return [...map.values()]
     .sort((a, b) => {
       const aNew = (a.status_counts.new || 0) > 0 ? 0 : 1
       const bNew = (b.status_counts.new || 0) > 0 ? 0 : 1
       if (aNew !== bNew) return aNew - bNew
-      return String(b.last_seen || '').localeCompare(String(a.last_seen || ''))
+      return compareTimeDesc(a.last_seen, b.last_seen)
     })
     .map(g => ({
       ...g,
-      members: g.members.slice().sort((a, b) =>
-        String(b.created_at || '').localeCompare(String(a.created_at || ''))
-      ),
+      members: g.members.slice().sort((a, b) => compareTimeDesc(a.created_at, b.created_at)),
     }))
 }
 
@@ -92,23 +104,21 @@ function groupStatus(g) {
 }
 
 function _toDate(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : d
+  return parseTimestampValue(iso)
 }
 
 function _formatDate(d) {
-  return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: '2-digit' })
+  return d.toLocaleDateString('en-GB', { timeZone: 'UTC', year: 'numeric', month: 'short', day: '2-digit' })
 }
 
 function _formatHMS(d) {
-  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  return d.toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
 function formatTime(iso) {
   const d = _toDate(iso)
   if (!d) return iso || '—'
-  return `${_formatDate(d)}, ${_formatHMS(d)}`
+  return formatTimestampUTC(d.toISOString())
 }
 
 function formatRange(first, last) {
@@ -118,8 +128,8 @@ function formatRange(first, last) {
   if (!fDate) return formatTime(last)
   if (!lDate) return formatTime(first)
   if (fDate.getTime() === lDate.getTime()) return formatTime(last)
-  if (fDate.toDateString() === lDate.toDateString()) {
-    return `${_formatDate(lDate)}, ${_formatHMS(fDate)} → ${_formatHMS(lDate)}`
+  if (sameUTCDate(fDate, lDate)) {
+    return `${_formatDate(lDate)}, ${_formatHMS(fDate)} → ${_formatHMS(lDate)} UTC`
   }
   return `${formatTime(first)} → ${formatTime(last)}`
 }

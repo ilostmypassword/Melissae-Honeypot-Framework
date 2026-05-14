@@ -26,10 +26,18 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
     if not isinstance(value, str) or not value:
         return None
     try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00").replace(" ", "T", 1))
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
     except ValueError:
         return None
+
+
+def _format_utc_iso(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def is_private_ip(ip_str: str) -> bool:
@@ -162,7 +170,7 @@ def _aggregate_alerts_by_ip(db) -> Dict[str, Dict]:
                 bucket["last_seen"] = ts
             rule_last = _parse_iso(rule_entry["last_seen"])
             if rule_last is None or ts > rule_last:
-                rule_entry["last_seen"] = ts.isoformat()
+                rule_entry["last_seen"] = _format_utc_iso(ts)
     return by_ip
 
 
@@ -199,9 +207,9 @@ def _compute_threat(ip: str, bucket: Dict) -> Dict:
         "agents": sorted(bucket["agents"]),
     }
     if bucket["first_seen"]:
-        doc["first_seen"] = bucket["first_seen"].isoformat()
+        doc["first_seen"] = _format_utc_iso(bucket["first_seen"])
     if bucket["last_seen"]:
-        doc["last_seen"] = bucket["last_seen"].isoformat()
+        doc["last_seen"] = _format_utc_iso(bucket["last_seen"])
     return doc
 
 
