@@ -1,18 +1,14 @@
 id: MLS013
 name: ActiveMQ Jolokia CVE-2026-34197 exploitation
 description: >
-  Activity on the ActiveMQ Classic CVE-2026-34197 honeypot module: Jolokia
-  MBean access (the exploitation vector described in GHSA-rxpj-7qvf-xv32) or
-  any post-exploitation runtime telemetry emitted by the monitor sidecar
-  (unexpected child processes, outbound connections, suspicious files, broker
-  IOCs). Loopback-only broker noise is filtered out.
+  External activity on the ActiveMQ Classic CVE-2026-34197 honeypot module.
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 1m
-mql: 'cve:CVE-2026-34197'
+mql: 'cve:CVE-2026-34197 AND path:jolokia'
 group_by: ip
 threshold: 1
-score: 90
-tags: [exploitation, cve, activemq, jolokia, rce]
-mitre: [T1190, T1059, T1105]
+score: 85
+tags: [exploitation, cve, activemq, jolokia]
+mitre: [T1190]
