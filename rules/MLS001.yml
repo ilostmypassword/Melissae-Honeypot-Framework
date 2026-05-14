@@ -1,15 +1,16 @@
 id: MLS001
-name: CVE exploitation attempt
+name: Telnet CVE-2026-24061 authentication bypass attempt
 description: >
-  Activity hitting a CVE-tagged honeypot module (e.g. CVE-2026-24061).
-  Treated as confirmed targeted exploitation.
+  Activity hitting the CVE-2026-24061 Telnet authentication-bypass honeypot
+  module. Any connection or command on this module is treated as targeted
+  exploitation of the vulnerable Telnet authentication path.
 severity: critical
 enabled: true
 schedule: "*/1 * * * *"
 lookback: 1m
-mql: 'cve:CVE'
+mql: 'cve:CVE-2026-24061'
 group_by: ip
 threshold: 1
-score: 70
-tags: [exploitation, cve]
-mitre: [T1190]
+score: 85
+tags: [exploitation, cve, telnet, auth-bypass]
+mitre: [T1190, T1078]

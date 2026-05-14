@@ -535,6 +535,15 @@ def parse_activemq_cve(logs_dir: str, file_states: Dict) -> List[Dict]:
     return logs
 
 # Parse ActiveMQ CVE-2026-34197 runtime telemetry emitted by the monitor sidecar
+_ACTIVEMQ_NOISE_PATH_TOKENS = (
+    '/tmp/hsperfdata_',
+    '/tmp/.java_pid',
+    '/tmp/jna-',
+    '/tmp/jetty-',
+    '/tmp/Jetty_',
+    '/tmp/tomcat',
+)
+
 def parse_activemq_runtime(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['activemq_cve_2026_34197_runtime']['source'])
@@ -546,26 +555,26 @@ def parse_activemq_runtime(logs_dir: str, file_states: Dict) -> List[Dict]:
             continue
 
         event_type = event.get('event', 'runtime_event')
+        # Drop noisy / non-actionable events
+        if event_type in ('monitor_start', 'process_observed'):
+            continue
         ip = event.get('ip') or '127.0.0.1'
         command = event.get('command')
         path = event.get('path') or event.get('remote') or event.get('source')
 
-        if event_type == 'process_start':
+        if event_type in ('file_created', 'file_modified'):
+            if not path or any(tok in path for tok in _ACTIVEMQ_NOISE_PATH_TOKENS):
+                continue
+            action = (f"RCE runtime file created: {path}" if event_type == 'file_created'
+                      else f"RCE runtime file modified: {path}")
+        elif event_type == 'process_start':
             action = f"RCE runtime process started: {command or 'unknown command'}"
-        elif event_type == 'process_observed':
-            action = f"Runtime process observed: {command or 'unknown command'}"
         elif event_type == 'outbound_connection':
             action = f"RCE runtime outbound connection to {event.get('remote', 'unknown remote')}"
             if command:
                 action = f"{action} from {command}"
-        elif event_type == 'file_created':
-            action = f"RCE runtime file created: {path or 'unknown path'}"
-        elif event_type == 'file_modified':
-            action = f"RCE runtime file modified: {path or 'unknown path'}"
         elif event_type == 'broker_ioc':
             action = f"ActiveMQ broker RCE indicator: {event.get('indicator', 'unknown indicator')}"
-        elif event_type == 'monitor_start':
-            action = "ActiveMQ runtime monitor started"
         else:
             action = f"ActiveMQ runtime event: {event_type}"
 
