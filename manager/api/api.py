@@ -96,6 +96,60 @@ def _log_sort_ts(log):
     dt = _parse_log_datetime(log)
     return dt.timestamp() if dt else 0
 
+def _build_alert_query(args):
+    query = {}
+
+    status = args.get("status")
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip() in VALID_ALERT_STATUSES]
+        if statuses:
+            query["status"] = {"$in": statuses}
+
+    severity = args.get("severity")
+    if severity:
+        sevs = [s.strip() for s in severity.split(",") if s.strip() in VALID_SEVERITIES]
+        if sevs:
+            query["severity"] = {"$in": sevs}
+
+    rule_id = args.get("rule_id")
+    if rule_id:
+        query["rule_id"] = _sanitize_str(rule_id, 64)
+
+    ip_filter = args.get("ip")
+    if ip_filter:
+        try:
+            ipaddress.ip_address(ip_filter)
+            query["ip"] = ip_filter
+        except ValueError:
+            raise ValueError("Invalid IP")
+
+    agent_id = args.get("agent_id")
+    if agent_id:
+        query["agent_id"] = _sanitize_str(agent_id, 64)
+
+    return query
+
+def _build_log_stats_query(args):
+    query = {}
+    agent_id = args.get("agent_id")
+    if agent_id:
+        query["agent_id"] = _sanitize_str(agent_id, 64)
+
+    date_range = args.get("range")
+    now = datetime.now(timezone.utc)
+    if date_range == "today":
+        from_dt = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    elif date_range == "7d":
+        from_dt = now - timedelta(days=7)
+    elif date_range == "30d":
+        from_dt = now - timedelta(days=30)
+    else:
+        from_dt = None
+
+    if from_dt:
+        query["timestamp"] = {"$gte": _format_utc_iso(from_dt), "$lte": _format_utc_iso(now)}
+    return query
+
 @app.route("/api/logs", methods=["GET"])
 # GET /api/logs — Paginated log retrieval with filters
 def api_logs():
@@ -116,10 +170,85 @@ def api_logs():
             skip = max(0, int(request.args.get("skip", 0)))
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid pagination parameters"}), 400
-        docs = list(db["logs"].find(query, {"_id": 0}).limit(MAX_RESULTS_LOGS))
-        docs.sort(key=_log_sort_ts, reverse=True)
-        data = docs[skip:skip + limit]
+        data = list(
+            db["logs"]
+            .find(query, {"_id": 0})
+            .sort("timestamp", -1)
+            .skip(skip)
+            .limit(limit)
+        )
         return jsonify(data)
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
+@app.route("/api/logs/stats", methods=["GET"])
+# GET /api/logs/stats — Server-side counters for large log volumes
+def api_logs_stats():
+    try:
+        db = get_db()
+        query = _build_log_stats_query(request.args)
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": None,
+                "totalLogs": {"$sum": 1},
+                "uniqueIPs": {"$addToSet": "$ip"},
+                "ssh": {"$sum": {"$cond": [{"$eq": ["$protocol", "ssh"]}, 1, 0]}},
+                "ftp": {"$sum": {"$cond": [{"$eq": ["$protocol", "ftp"]}, 1, 0]}},
+                "http": {"$sum": {"$cond": [{"$eq": ["$protocol", "http"]}, 1, 0]}},
+                "modbus": {"$sum": {"$cond": [{"$eq": ["$protocol", "modbus"]}, 1, 0]}},
+                "mqtt": {"$sum": {"$cond": [{"$eq": ["$protocol", "mqtt"]}, 1, 0]}},
+                "telnet": {"$sum": {"$cond": [{"$eq": ["$protocol", "telnet"]}, 1, 0]}},
+                "cveLogs": {"$sum": {"$cond": [{"$ifNull": ["$cve", False]}, 1, 0]}},
+                "successSSH": {"$sum": {"$cond": [{"$and": [
+                    {"$eq": ["$protocol", "ssh"]},
+                    {"$regexMatch": {"input": {"$toLower": {"$ifNull": ["$action", ""]}}, "regex": "accepted|successful"}},
+                ]}, 1, 0]}},
+                "successFTP": {"$sum": {"$cond": [{"$and": [
+                    {"$eq": ["$protocol", "ftp"]},
+                    {"$regexMatch": {"input": {"$toLower": {"$ifNull": ["$action", ""]}}, "regex": "successful"}},
+                ]}, 1, 0]}},
+                "successTelnet": {"$sum": {"$cond": [{"$and": [
+                    {"$eq": ["$protocol", "telnet"]},
+                    {"$regexMatch": {"input": {"$toLower": {"$ifNull": ["$action", ""]}}, "regex": "session opened"}},
+                ]}, 1, 0]}},
+                "modbusWrites": {"$sum": {"$cond": [{"$and": [
+                    {"$eq": ["$protocol", "modbus"]},
+                    {"$regexMatch": {"input": {"$toLower": {"$ifNull": ["$action", ""]}}, "regex": "write"}},
+                ]}, 1, 0]}},
+            }},
+        ]
+        rows = list(db["logs"].aggregate(pipeline, allowDiskUse=True))
+        if not rows:
+            return jsonify({
+                "totalLogs": 0,
+                "uniqueIPs": 0,
+                "protocols": {"ssh": 0, "ftp": 0, "http": 0, "modbus": 0, "mqtt": 0, "telnet": 0},
+                "cveLogs": 0,
+                "successSSH": 0,
+                "successFTP": 0,
+                "successTelnet": 0,
+                "modbusWrites": 0,
+            })
+
+        row = rows[0]
+        return jsonify({
+            "totalLogs": int(row.get("totalLogs", 0)),
+            "uniqueIPs": len([ip for ip in row.get("uniqueIPs", []) if ip]),
+            "protocols": {
+                "ssh": int(row.get("ssh", 0)),
+                "ftp": int(row.get("ftp", 0)),
+                "http": int(row.get("http", 0)),
+                "modbus": int(row.get("modbus", 0)),
+                "mqtt": int(row.get("mqtt", 0)),
+                "telnet": int(row.get("telnet", 0)),
+            },
+            "cveLogs": int(row.get("cveLogs", 0)),
+            "successSSH": int(row.get("successSSH", 0)),
+            "successFTP": int(row.get("successFTP", 0)),
+            "successTelnet": int(row.get("successTelnet", 0)),
+            "modbusWrites": int(row.get("modbusWrites", 0)),
+        })
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
 
@@ -475,35 +604,10 @@ RULES_DIR = os.getenv("MELISSAE_RULES_DIR", "/rules")
 def api_alerts():
     try:
         db = get_db()
-        query = {}
-
-        status = request.args.get("status")
-        if status:
-            statuses = [s.strip() for s in status.split(",") if s.strip() in VALID_ALERT_STATUSES]
-            if statuses:
-                query["status"] = {"$in": statuses}
-
-        severity = request.args.get("severity")
-        if severity:
-            sevs = [s.strip() for s in severity.split(",") if s.strip() in VALID_SEVERITIES]
-            if sevs:
-                query["severity"] = {"$in": sevs}
-
-        rule_id = request.args.get("rule_id")
-        if rule_id:
-            query["rule_id"] = _sanitize_str(rule_id, 64)
-
-        ip_filter = request.args.get("ip")
-        if ip_filter:
-            try:
-                ipaddress.ip_address(ip_filter)
-                query["ip"] = ip_filter
-            except ValueError:
-                return jsonify({"error": "Invalid IP"}), 400
-
-        agent_id = request.args.get("agent_id")
-        if agent_id:
-            query["agent_id"] = _sanitize_str(agent_id, 64)
+        try:
+            query = _build_alert_query(request.args)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         try:
             limit = max(1, min(int(request.args.get("limit", 500)), MAX_RESULTS_ALERTS))
@@ -522,16 +626,47 @@ def api_alerts():
 def api_alerts_count():
     try:
         db = get_db()
-        pipeline = [{"$group": {"_id": "$status", "n": {"$sum": 1}}}]
-        out = {"new": 0, "acknowledged": 0, "resolved": 0, "total": 0, "new_groups": 0}
-        for row in db["alerts"].aggregate(pipeline):
+        try:
+            query = _build_alert_query(request.args)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        out = {
+            "new": 0,
+            "acknowledged": 0,
+            "resolved": 0,
+            "total": 0,
+            "groups": 0,
+            "new_groups": 0,
+            "severity": {"low": 0, "medium": 0, "high": 0, "critical": 0},
+        }
+
+        status_pipeline = [{"$match": query}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}]
+        for row in db["alerts"].aggregate(status_pipeline):
             status = row.get("_id") or "new"
             if status in out:
                 out[status] = int(row.get("n", 0))
             out["total"] += int(row.get("n", 0))
 
+        severity_pipeline = [{"$match": query}, {"$group": {"_id": "$severity", "n": {"$sum": 1}}}]
+        for row in db["alerts"].aggregate(severity_pipeline):
+            severity = row.get("_id") or "medium"
+            if severity in out["severity"]:
+                out["severity"][severity] = int(row.get("n", 0))
+
+        groups_pipeline = [
+            {"$match": query},
+            {"$group": {"_id": {"rule_id": "$rule_id", "ip": "$ip"}}},
+            {"$count": "n"},
+        ]
+        rows = list(db["alerts"].aggregate(groups_pipeline))
+        if rows:
+            out["groups"] = int(rows[0].get("n", 0))
+
+        new_group_query = dict(query)
+        new_group_query["status"] = "new"
         group_pipeline = [
-            {"$match": {"status": "new"}},
+            {"$match": new_group_query},
             {"$group": {"_id": {"rule_id": "$rule_id", "ip": "$ip"}}},
             {"$count": "n"},
         ]

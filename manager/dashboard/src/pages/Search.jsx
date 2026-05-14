@@ -101,7 +101,7 @@ export default function Search() {
     ]
   }
 
-  const columns = results ? getColumns(results) : []
+  const columns = useMemo(() => results ? getColumns(results) : [], [results])
 
   const renderCell = (key, value, row) => {
     switch (key) {

@@ -389,6 +389,10 @@ def run_due_rules(now: Optional[datetime] = None,
 
 def _ensure_indexes(db) -> None:
     try:
+        db["logs"].create_index([("timestamp", -1)])
+        db["logs"].create_index([("agent_id", 1), ("timestamp", -1)])
+        db["logs"].create_index("protocol")
+        db["logs"].create_index("ip")
         db["alerts"].create_index("ip")
         db["alerts"].create_index("rule_id")
         db["alerts"].create_index("status")

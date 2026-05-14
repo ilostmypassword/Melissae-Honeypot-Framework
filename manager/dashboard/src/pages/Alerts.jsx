@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { fetchAlerts, updateAlertStatus, updateAlertsBulk } from '../api'
+import { fetchAlertCounts, fetchAlerts, updateAlertStatus, updateAlertsBulk } from '../api'
 import { SeverityTag, AlertStatusTag, ProtocolTag } from '../components/Tags'
-import { formatTimestampUTC, parseTimestampValue, sameUTCDate, timestampToMs } from '../utils'
+import { formatNumber, formatTimestampUTC, parseTimestampValue, sameUTCDate, timestampToMs } from '../utils'
 
 const REFRESH_INTERVAL = 20_000
 const STATUS_FILTERS = [
@@ -177,6 +177,27 @@ function groupSearchQuery(group) {
   return parts.join(' AND ')
 }
 
+function countStats(alerts, groups, counts) {
+  if (counts) {
+    return {
+      total: Number(counts.total || 0),
+      groups: Number(counts.groups || 0),
+      new: Number(counts.new || 0),
+      acknowledged: Number(counts.acknowledged || 0),
+      resolved: Number(counts.resolved || 0),
+      critical: Number(counts.severity?.critical || 0),
+    }
+  }
+  return {
+    total:        alerts.length,
+    groups:       groups.length,
+    new:          alerts.filter(a => a.status === 'new').length,
+    acknowledged: alerts.filter(a => a.status === 'acknowledged').length,
+    resolved:     alerts.filter(a => a.status === 'resolved').length,
+    critical:     alerts.filter(a => a.severity === 'critical').length,
+  }
+}
+
 // Alerts backlog page
 export default function Alerts() {
   const navigate = useNavigate()
@@ -190,6 +211,7 @@ export default function Alerts() {
   const [viewMode, setViewMode] = useState(searchParams.get('view') === 'flat' ? 'flat' : 'grouped')
   const [selected, setSelected] = useState(new Set())
   const [expanded, setExpanded] = useState(new Set())
+  const [alertCounts, setAlertCounts] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -198,9 +220,12 @@ export default function Alerts() {
       if (statusFilter) filters.status = statusFilter
       if (severityFilter) filters.severity = severityFilter
       if (ruleFilter) filters.rule_id = ruleFilter
-      filters.limit = 5000
-      const data = await fetchAlerts(filters)
+      const [data, counts] = await Promise.all([
+        fetchAlerts({ ...filters, limit: 5000 }),
+        fetchAlertCounts(filters).catch(() => null),
+      ])
       setAlerts(sortAlerts(data))
+      setAlertCounts(counts)
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -251,14 +276,7 @@ export default function Alerts() {
     })
   }, [groups])
 
-  const stats = useMemo(() => ({
-    total:        alerts.length,
-    groups:       groups.length,
-    new:          alerts.filter(a => a.status === 'new').length,
-    acknowledged: alerts.filter(a => a.status === 'acknowledged').length,
-    resolved:     alerts.filter(a => a.status === 'resolved').length,
-    critical:     alerts.filter(a => a.severity === 'critical').length,
-  }), [alerts, groups])
+  const stats = useMemo(() => countStats(alerts, groups, alertCounts), [alerts, groups, alertCounts])
 
   const toggleSelected = id => {
     setSelected(prev => {
@@ -420,6 +438,11 @@ export default function Alerts() {
 
       {/* Backlog table */}
       <div className="glass-card overflow-hidden">
+        {stats.total > alerts.length && (
+          <div className="px-4 py-2 border-b border-border/50 bg-surface-tertiary/40 text-[11px] text-text-muted font-mono">
+            Showing latest {formatNumber(alerts.length)} of {formatNumber(stats.total)} matching alerts. Counters include all matches.
+          </div>
+        )}
         {alerts.length === 0 ? (
           <div className="px-6 py-12 text-center text-text-muted text-sm">
             No alerts match the current filters.
