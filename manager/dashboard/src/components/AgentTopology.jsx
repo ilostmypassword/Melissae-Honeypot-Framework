@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { compareLogTimestampsDesc } from '../utils'
 
 const PROTOCOL_COLOR = {
   ssh:    '#5b8db8',
@@ -480,7 +481,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     seenRef.current = sigs
     if (newLogs.length === 0) return
 
-    newLogs.sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))
+    newLogs.sort((a, b) => compareLogTimestampsDesc(b, a))
     const SPREAD = Math.min(15000, Math.max(1000, newLogs.length * 250))
     const step = SPREAD / Math.max(1, newLogs.length)
     newLogs.forEach((log, i) => {

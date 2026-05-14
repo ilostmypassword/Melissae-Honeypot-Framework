@@ -13,22 +13,102 @@ export function formatNumber(n) {
   return String(n)
 }
 
+// Parse Melissae timestamps consistently as UTC.
+export function parseTimestampValue(value) {
+  if (!value) return null
+  let raw = String(value).trim()
+  if (!raw) return null
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) raw = `${raw}T00:00:00Z`
+  else raw = raw.replace(' ', 'T')
+
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+  if (!hasTimezone) raw += 'Z'
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+// Resolve the best timestamp available on a log-like object
+export function parseLogTimestamp(log) {
+  if (!log) return null
+  return parseTimestampValue(log.timestamp)
+    || parseTimestampValue(log.time)
+    || parseTimestampValue(log.datetime)
+    || parseTimestampValue(log.date && `${log.date}T${log.hour || '00:00:00'}`)
+}
+
+export function timestampToMs(value) {
+  const parsed = parseTimestampValue(value)
+  return parsed ? parsed.getTime() : NaN
+}
+
+export function logTimestampToMs(log) {
+  const parsed = parseLogTimestamp(log)
+  return parsed ? parsed.getTime() : NaN
+}
+
+export function getLogDateKey(log) {
+  const parsed = parseLogTimestamp(log)
+  if (parsed) return parsed.toISOString().slice(0, 10)
+  return typeof log?.date === 'string' ? log.date.slice(0, 10) : ''
+}
+
+export function getLogHourKey(log) {
+  const parsed = parseLogTimestamp(log)
+  if (parsed) return parsed.toISOString().slice(11, 19)
+  return typeof log?.hour === 'string' ? log.hour.slice(0, 8) : ''
+}
+
+export function formatTimestampUTC(value) {
+  const parsed = parseTimestampValue(value)
+  if (!parsed) return value || '—'
+  return parsed.toLocaleString('en-GB', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }) + ' UTC'
+}
+
+export function formatLogTimestampUTC(log) {
+  const parsed = parseLogTimestamp(log)
+  return parsed ? formatTimestampUTC(parsed.toISOString()) : '—'
+}
+
+export function compareLogTimestampsDesc(a, b) {
+  const ta = logTimestampToMs(a)
+  const tb = logTimestampToMs(b)
+  if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta
+  if (Number.isFinite(ta)) return -1
+  if (Number.isFinite(tb)) return 1
+  return String(b?.timestamp || '').localeCompare(String(a?.timestamp || ''))
+}
+
+export function sameUTCDate(a, b) {
+  if (!a || !b) return false
+  return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)
+}
+
 // Filter logs by a named date range ('today', '7d', '30d', 'all')
 export function filterByDateRange(logs, dateRange) {
   if (dateRange === 'all') return logs
   const now = new Date()
-  const pad = n => String(n).padStart(2, '0')
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-  let cutoffDate
+  let from
   if (dateRange === 'today') {
-    cutoffDate = todayStr
+    from = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   } else {
-    const cutoff = new Date(now)
-    if (dateRange === '7d') cutoff.setDate(cutoff.getDate() - 7)
-    else if (dateRange === '30d') cutoff.setDate(cutoff.getDate() - 30)
-    cutoffDate = `${cutoff.getFullYear()}-${pad(cutoff.getMonth() + 1)}-${pad(cutoff.getDate())}`
+    const days = dateRange === '30d' ? 30 : 7
+    from = now.getTime() - days * 86400_000
   }
-  return logs.filter(l => l.date && l.date >= cutoffDate)
+  return logs.filter(l => {
+    const ts = logTimestampToMs(l)
+    return Number.isFinite(ts) && ts >= from && ts <= now.getTime()
+  })
 }
 
 // Compute aggregate statistics from a logs array
@@ -58,9 +138,8 @@ export function computeTrend(allLogs, selectedAgent) {
   const h48 = new Date(now - 172800_000)
 
   const inRange = (l, from, to) => {
-    if (!l.date) return false
-    const d = new Date(l.date + 'T' + (l.hour || '00:00:00'))
-    return d >= from && d < to
+    const ts = logTimestampToMs(l)
+    return Number.isFinite(ts) && ts >= from.getTime() && ts < to.getTime()
   }
 
   const logs = selectedAgent ? allLogs.filter(l => l.agent_id === selectedAgent) : allLogs

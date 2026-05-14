@@ -10,11 +10,14 @@ DB_NAME = os.getenv("MONGO_DB", "melissae")
 
 # Parse a timestamp from various log formats
 def parse_timestamp(log: dict) -> Optional[datetime]:
+    if not log:
+        return None
     raw_ts = log.get("timestamp") or log.get("time") or log.get("datetime")
     if raw_ts:
         try:
-            dt = datetime.fromisoformat(raw_ts)
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
+            raw = str(raw_ts).strip().replace("Z", "+00:00").replace(" ", "T", 1)
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
         except ValueError:
             pass
 
@@ -22,7 +25,13 @@ def parse_timestamp(log: dict) -> Optional[datetime]:
     hour = log.get("hour")
     if date and hour:
         try:
-            return datetime.strptime(f"{date} {hour}", "%Y-%m-%d %H:%M:%S")
+            raw = f"{date}T{hour}".replace("Z", "+00:00")
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(f"{date} {str(hour)[:8]}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
             return None
     return None
@@ -42,7 +51,7 @@ def get_last_seen(db, ip: str) -> Optional[datetime]:
 
 # Remove benign IPs and their logs if unseen for 1 hour
 def purge_benign_older_than_1h():
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]

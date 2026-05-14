@@ -181,17 +181,43 @@ def _alert_id(rule_id: str, log_id: str) -> str:
     return hashlib.sha256(f"{rule_id}|{log_id}".encode("utf-8")).hexdigest()
 
 
-def _log_event_time(log: Dict) -> Optional[str]:
-    ts = log.get("timestamp")
-    if isinstance(ts, str) and ts:
-        return ts.replace(" ", "T", 1)
+def _parse_log_datetime(log: Dict) -> Optional[datetime]:
+    raw_ts = log.get("timestamp") or log.get("time") or log.get("datetime")
+    if isinstance(raw_ts, str) and raw_ts.strip():
+        raw = raw_ts.strip().replace("Z", "+00:00").replace(" ", "T", 1)
+        try:
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except ValueError:
+            pass
+
     date = log.get("date")
-    hour = log.get("hour")
-    if isinstance(date, str) and date:
-        if isinstance(hour, str) and hour:
-            return f"{date}T{hour}"
-        return f"{date}T00:00:00"
+    hour = log.get("hour") or "00:00:00"
+    if isinstance(date, str) and date.strip():
+        raw = f"{date.strip()}T{str(hour).strip()}".replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except ValueError:
+            try:
+                dt = datetime.strptime(f"{date.strip()} {str(hour).strip()[:8]}", "%Y-%m-%d %H:%M:%S")
+                return dt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
     return None
+
+
+def _format_utc_iso(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _log_event_time(log: Dict) -> Optional[str]:
+    dt = _parse_log_datetime(log)
+    return _format_utc_iso(dt) if dt else None
 
 
 # Stable id for a log: prefer stored hash/_id, fall back to digest of key fields
@@ -208,15 +234,16 @@ def _log_unique_id(log: Dict) -> str:
 # Fetch logs newer than (now - lookback). Uses date+hour fallback
 def _fetch_logs(db, lookback: timedelta) -> List[Dict]:
     cutoff_dt = datetime.now(timezone.utc) - lookback
-    cutoff_iso = cutoff_dt.isoformat()
+    cutoff_iso = _format_utc_iso(cutoff_dt)
     cutoff_date = cutoff_dt.strftime("%Y-%m-%d")
     query = {
         "$or": [
-            {"timestamp": {"$gte": cutoff_iso[:19]}},
+            {"timestamp": {"$gte": cutoff_iso}},
             {"date": {"$gte": cutoff_date}},
         ]
     }
-    return list(db["logs"].find(query, {}).limit(50000))
+    logs = list(db["logs"].find(query, {}).limit(50000))
+    return [log for log in logs if (dt := _parse_log_datetime(log)) and dt >= cutoff_dt]
 
 
 # Run a single rule against the DB; returns (alerts_emitted, groups_triggered)

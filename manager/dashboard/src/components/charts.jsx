@@ -1,20 +1,21 @@
 import { useMemo } from 'react'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
-import { formatNumber } from '../utils'
+import { formatNumber, getLogDateKey, getLogHourKey } from '../utils'
 
 // Daily event count line chart
 export function DailyChart({ logs, onDayClick }) {
   const { labels, data, fullDates } = useMemo(() => {
     const dayCounts = {}
     for (const l of logs) {
-      if (l.date) dayCounts[l.date] = (dayCounts[l.date] || 0) + 1
+      const day = getLogDateKey(l)
+      if (day) dayCounts[day] = (dayCounts[day] || 0) + 1
     }
     const sorted = Object.entries(dayCounts).sort((a, b) => a[0].localeCompare(b[0]))
     if (sorted.length >= 2) {
-      const start = new Date(sorted[0][0] + 'T00:00:00')
-      const end = new Date(sorted[sorted.length - 1][0] + 'T00:00:00')
+      const start = new Date(sorted[0][0] + 'T00:00:00Z')
+      const end = new Date(sorted[sorted.length - 1][0] + 'T00:00:00Z')
       const filled = []
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
         const key = d.toISOString().slice(0, 10)
         filled.push([key, dayCounts[key] || 0])
       }
@@ -72,7 +73,7 @@ export function ActivityChart({ logs, onHourClick }) {
   const data = useMemo(() => {
     const counts = new Array(24).fill(0)
     logs.forEach(l => {
-      const h = parseInt(l.hour?.split(':')[0]) || 0
+      const h = parseInt(getLogHourKey(l).split(':')[0]) || 0
       if (h >= 0 && h < 24) counts[h]++
     })
     return counts
@@ -111,10 +112,12 @@ export function Heatmap({ logs }) {
   const grid = useMemo(() => {
     const data = Array.from({ length: 7 }, () => new Array(24).fill(0))
     for (const l of logs) {
-      if (!l.date || !l.hour) continue
-      const dow = new Date(l.date + 'T00:00:00').getDay()
+      const day = getLogDateKey(l)
+      const hour = getLogHourKey(l)
+      if (!day || !hour) continue
+      const dow = new Date(day + 'T00:00:00Z').getUTCDay()
       if (isNaN(dow)) continue
-      const h = parseInt(l.hour.split(':')[0]) || 0
+      const h = parseInt(hour.split(':')[0]) || 0
       if (h >= 0 && h < 24) data[dow][h]++
     }
     return data
@@ -296,18 +299,19 @@ export function ProtocolTimelineChart({ logs }) {
   const { labels, datasets } = useMemo(() => {
     const dayCounts = {}
     for (const l of logs) {
-      if (!l.date || !l.protocol || !_PROTO_LIST.includes(l.protocol)) continue
-      if (!dayCounts[l.date]) dayCounts[l.date] = {}
-      dayCounts[l.date][l.protocol] = (dayCounts[l.date][l.protocol] || 0) + 1
+      const day = getLogDateKey(l)
+      if (!day || !l.protocol || !_PROTO_LIST.includes(l.protocol)) continue
+      if (!dayCounts[day]) dayCounts[day] = {}
+      dayCounts[day][l.protocol] = (dayCounts[day][l.protocol] || 0) + 1
     }
     const sortedDays = Object.keys(dayCounts).sort()
     if (sortedDays.length === 0) return { labels: [], datasets: [] }
 
     const allDays = []
     if (sortedDays.length >= 2) {
-      const start = new Date(sortedDays[0] + 'T00:00:00')
-      const end = new Date(sortedDays[sortedDays.length - 1] + 'T00:00:00')
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const start = new Date(sortedDays[0] + 'T00:00:00Z')
+      const end = new Date(sortedDays[sortedDays.length - 1] + 'T00:00:00Z')
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
         allDays.push(d.toISOString().slice(0, 10))
       }
     } else {

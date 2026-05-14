@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
-import { formatNumber } from '../utils'
+import { formatNumber, logTimestampToMs, timestampToMs } from '../utils'
 
 const PAGE_SIZES = [25, 50, 100, 250]
+const TIME_KEYS = new Set(['timestamp', 'created_at', 'updated_at', 'first_seen', 'last_seen', 'last_push', 'last_check'])
 
 // Sortable, paginated data table component
 export default function DataTable({
@@ -36,6 +37,13 @@ export default function DataTable({
     return [...data].sort((a, b) => {
       const va = a[sortKey] ?? ''
       const vb = b[sortKey] ?? ''
+      if (TIME_KEYS.has(sortKey)) {
+        const ta = sortKey === 'timestamp' ? logTimestampToMs(a) : timestampToMs(va)
+        const tb = sortKey === 'timestamp' ? logTimestampToMs(b) : timestampToMs(vb)
+        if (Number.isFinite(ta) && Number.isFinite(tb)) {
+          return sortDir === 'asc' ? ta - tb : tb - ta
+        }
+      }
       const cmp = typeof va === 'number' && typeof vb === 'number'
         ? va - vb
         : String(va).localeCompare(String(vb), undefined, { numeric: true })

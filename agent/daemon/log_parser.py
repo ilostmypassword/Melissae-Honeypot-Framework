@@ -105,12 +105,15 @@ def create_entry(protocol: str, dt: datetime, ip: str, action: str,
                  path: str = None, user_agent: str = None,
                  user: Optional[str] = None, cve: Optional[str] = None) -> Dict:
     if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        dt = dt.astimezone(timezone.utc)
+    else:
+        dt = dt.replace(tzinfo=timezone.utc)
+    timestamp = dt.isoformat(timespec='microseconds').replace('+00:00', 'Z')
     entry = {
         "protocol": protocol,
         "date": dt.strftime('%Y-%m-%d'),
         "hour": dt.strftime('%H:%M:%S'),
-        "timestamp": dt.isoformat(sep=' ', timespec='microseconds'),
+        "timestamp": timestamp,
         "ip": ip,
         "action": action,
     }
@@ -127,8 +130,8 @@ def create_entry(protocol: str, dt: datetime, ip: str, action: str,
 
 # Parse an ISO 8601 timestamp string
 def parse_iso8601_ts(datetime_str: str) -> datetime:
-    dt_part = datetime_str.split('.')[0]
-    return datetime.strptime(dt_part, "%Y-%m-%dT%H:%M:%S")
+    cleaned = datetime_str.replace('Z', '+00:00')
+    return datetime.fromisoformat(cleaned).astimezone(timezone.utc)
 
 # Load file read positions from disk
 def load_file_states(state_path: str) -> Dict:
@@ -194,11 +197,11 @@ def parse_ssh_auth(logs_dir: str, file_states: Dict) -> List[Dict]:
 
         dt = None
         if date_match:
-            dt = datetime.strptime(date_match.group('date'), "%Y-%m-%dT%H:%M:%S.%f%z").replace(tzinfo=None)
+            dt = datetime.strptime(date_match.group('date'), "%Y-%m-%dT%H:%M:%S.%f%z")
         else:
             syslog_date = re.match(r'^(?P<month>\w{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})', line)
             if syslog_date:
-                year = datetime.utcnow().year
+                year = datetime.now(timezone.utc).year
                 dt = datetime.strptime(
                     f"{year} {syslog_date.group('month')} {syslog_date.group('day')} {syslog_date.group('time')}",
                     "%Y %b %d %H:%M:%S"
@@ -337,7 +340,7 @@ def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) 
 
         m = p['connect'].search(line)
         if m:
-            dt = datetime.utcfromtimestamp(int(m.group('date')))
+            dt = datetime.fromtimestamp(int(m.group('date')), timezone.utc)
             ip = m.group('ip')
             client_match = re.search(r'as\s+(?P<client>\S+)', line)
             if client_match:
@@ -348,7 +351,7 @@ def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) 
 
         m = p['disconnect'].search(line)
         if m:
-            dt = datetime.utcfromtimestamp(int(m.group('date')))
+            dt = datetime.fromtimestamp(int(m.group('date')), timezone.utc)
             user = m.group('user')
             ip = client_ip_map.get(user, 'unknown')
             logs.append(create_entry('mqtt', dt, ip, 'Client disconnected', user=user))
@@ -357,7 +360,7 @@ def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) 
 
         m = p['subscribe'].search(line)
         if m:
-            dt = datetime.utcfromtimestamp(int(m.group('date')))
+            dt = datetime.fromtimestamp(int(m.group('date')), timezone.utc)
             user = m.group('user')
             ip = client_ip_map.get(user, 'unknown')
             topic = None
@@ -375,7 +378,7 @@ def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) 
 
         m = p['publish'].search(line)
         if m:
-            dt = datetime.utcfromtimestamp(int(m.group('date')))
+            dt = datetime.fromtimestamp(int(m.group('date')), timezone.utc)
             user = m.group('user')
             ip = client_ip_map.get(user, 'unknown')
             logs.append(create_entry('mqtt', dt, ip,

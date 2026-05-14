@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { fetchKillchain } from '../api'
+import { formatTimestampUTC, parseTimestampValue } from '../utils'
 
 const killchainCache = new Map()
 const MAX_CACHE = 200
@@ -17,8 +18,7 @@ const dotColors = {
 // Format a timestamp for display
 function formatTime(ts) {
   if (!Number.isFinite(ts)) return 'Unknown'
-  const d = new Date(ts)
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
+  return formatTimestampUTC(new Date(ts).toISOString())
 }
 
 // Process raw killchain events into timeline data
@@ -26,7 +26,8 @@ function processEvents(rawEvents) {
   const events = rawEvents
     .map(e => {
       const rawTime = e.timestamp || e.time || e.date || e.datetime
-      const ts = rawTime ? new Date(rawTime).getTime() : NaN
+      const parsed = parseTimestampValue(rawTime)
+      const ts = parsed ? parsed.getTime() : NaN
       const protocol = (e.protocol || e.proto || 'other').toLowerCase()
       return { ts, protocol }
     })

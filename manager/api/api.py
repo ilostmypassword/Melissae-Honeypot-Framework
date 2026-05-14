@@ -22,7 +22,7 @@ MAX_BATCH_SIZE = 500
 MAX_RESULTS_LOGS = 5000
 MAX_RESULTS_THREATS = 2000
 
-REQUIRED_LOG_FIELDS = {"protocol", "date", "ip", "action"}
+REQUIRED_LOG_FIELDS = {"protocol", "ip", "action"}
 
 MAX_FIELD_LEN = 512
 
@@ -46,6 +46,56 @@ def _compute_uid(log):
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
+def _format_utc_iso(dt):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+def _parse_log_datetime(log):
+    raw_ts = log.get("timestamp") or log.get("time") or log.get("datetime")
+    if isinstance(raw_ts, str) and raw_ts.strip():
+        raw = raw_ts.strip().replace("Z", "+00:00").replace(" ", "T", 1)
+        try:
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except ValueError:
+            pass
+
+    date = log.get("date")
+    hour = log.get("hour") or "00:00:00"
+    if isinstance(date, str) and date.strip():
+        raw = f"{date.strip()}T{str(hour).strip()}".replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(raw)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except ValueError:
+            pass
+        try:
+            dt = datetime.strptime(f"{date.strip()} {str(hour).strip()[:8]}", "%Y-%m-%d %H:%M:%S")
+            return dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            try:
+                dt = datetime.fromisoformat(date.strip().replace("Z", "+00:00"))
+                return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+            except ValueError:
+                return None
+    return None
+
+def _normalize_log_timestamp(log):
+    dt = _parse_log_datetime(log)
+    if dt is None:
+        return False
+    log["timestamp"] = _format_utc_iso(dt)
+    log["date"] = dt.strftime("%Y-%m-%d")
+    log["hour"] = dt.strftime("%H:%M:%S")
+    return True
+
+def _log_sort_ts(log):
+    dt = _parse_log_datetime(log)
+    return dt.timestamp() if dt else 0
+
 @app.route("/api/logs", methods=["GET"])
 # GET /api/logs — Paginated log retrieval with filters
 def api_logs():
@@ -66,7 +116,9 @@ def api_logs():
             skip = max(0, int(request.args.get("skip", 0)))
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid pagination parameters"}), 400
-        data = list(db["logs"].find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit))
+        docs = list(db["logs"].find(query, {"_id": 0}).limit(MAX_RESULTS_LOGS))
+        docs.sort(key=_log_sort_ts, reverse=True)
+        data = docs[skip:skip + limit]
         return jsonify(data)
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
@@ -109,31 +161,11 @@ def api_killchain(ip):
 
         events = []
         for log in logs:
-            ts_str = log.get("timestamp")
-            dt = None
-
-            if ts_str:
-                try:
-                    dt = datetime.fromisoformat(ts_str)
-                except ValueError:
-                    dt = None
-
-            if not dt and log.get("date") and log.get("hour"):
-                ts_str = f"{log['date']} {log['hour']}"
-                try:
-                    dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    dt = None
-
-            if not dt and log.get("date"):
-                ts_str = log.get("date")
-                try:
-                    dt = datetime.fromisoformat(ts_str)
-                except ValueError:
-                    dt = None
+            dt = _parse_log_datetime(log)
+            ts_str = _format_utc_iso(dt) if dt else log.get("timestamp") or log.get("date")
 
             event = {
-                "timestamp": dt.isoformat() if dt else ts_str,
+                "timestamp": ts_str,
                 "protocol": log.get("protocol", "other"),
                 "action": log.get("action"),
                 "path": log.get("path"),
@@ -199,6 +231,9 @@ def api_ingest():
                     sanitized[k] = _sanitize_str(v)
                 else:
                     sanitized[k] = v
+
+            if not _normalize_log_timestamp(sanitized):
+                continue
 
             sanitized["agent_id"] = _sanitize_str(agent_id, 64)
 
