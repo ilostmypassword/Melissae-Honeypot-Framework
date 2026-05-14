@@ -12,6 +12,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 
 import requests
 import yaml
@@ -29,6 +30,23 @@ log = logging.getLogger('melissae-agent')
 def load_config(path: str) -> dict:
     with open(path, 'r') as f:
         return yaml.safe_load(f)
+
+def resolve_path(path_value: str, base_dir: Path) -> str:
+    path = Path(path_value).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    return str(path.resolve())
+
+def writable_file_path(path_value: str, fallback_path: str, base_dir: Path) -> str:
+    resolved = resolve_path(path_value, base_dir)
+    try:
+        os.makedirs(os.path.dirname(resolved) or '.', exist_ok=True)
+        return resolved
+    except PermissionError:
+        fallback = resolve_path(fallback_path, base_dir)
+        os.makedirs(os.path.dirname(fallback) or '.', exist_ok=True)
+        log.warning(f"Cannot write to '{resolved}', falling back to '{fallback}'")
+        return fallback
 
 # SQLite-based log buffer with size management
 class LogBuffer:
@@ -336,15 +354,17 @@ def main():
         print(f"Usage: {sys.argv[0]} --config <config.yml>")
         sys.exit(1)
 
-    config = load_config(sys.argv[2])
+    config_path = Path(sys.argv[2]).expanduser().resolve()
+    config = load_config(str(config_path))
+    base_dir = config_path.parent
     agent_id = config['agent_id']
-    logs_dir = config.get('logs_dir', '/logs')
+    logs_dir = resolve_path(config.get('logs_dir', '../logs'), base_dir)
     push_interval = config['push']['interval_seconds']
     batch_size = config['push']['batch_size']
     retry_max = config['push']['retry_max_seconds']
-    buffer_db = config['buffer']['db_path']
+    buffer_db = writable_file_path(config['buffer']['db_path'], '../data/buffer.db', base_dir)
     max_buffer = config['buffer']['max_size_mb']
-    state_path = config.get('state_path', '/var/lib/melissae/parser_state.json')
+    state_path = writable_file_path(config.get('state_path', '../data/parser_state.json'), '../data/parser_state.json', base_dir)
 
     enabled_modules = {}
     for mod_name, mod_cfg in config.get('modules', {}).items():

@@ -322,7 +322,7 @@ modules:
     log_path: "ftp/vsftpd.log"
   http:
     enabled: true
-    log_path: "http/access.log"
+    log_path: "web/access.log"
   modbus:
     enabled: true
     log_path: "modbus/modbus.log"
@@ -335,9 +335,9 @@ modules:
   cve-2026-24061:
     enabled: false
     log_path: "cve/CVE-2026-24061/auth.log"
-    cve-2026-34197:
-        enabled: false
-        log_path: "cve/CVE-2026-34197/access.log"
+  cve-2026-34197:
+    enabled: false
+    log_path: "cve/CVE-2026-34197/access.log"
 CFGEOF
     success "Config written: $CONFIG_FILE"
 
