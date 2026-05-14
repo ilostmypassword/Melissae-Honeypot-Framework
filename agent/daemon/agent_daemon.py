@@ -366,6 +366,15 @@ def main():
     max_buffer = config['buffer']['max_size_mb']
     state_path = writable_file_path(config.get('state_path', '../data/parser_state.json'), '../data/parser_state.json', base_dir)
 
+    # Resolve TLS material paths so they work regardless of cwd
+    config['agent']['cert'] = resolve_path(config['agent']['cert'], base_dir)
+    config['agent']['key'] = resolve_path(config['agent']['key'], base_dir)
+    config['manager']['ca_cert'] = resolve_path(config['manager']['ca_cert'], base_dir)
+    for tls_path in (config['agent']['cert'], config['agent']['key'], config['manager']['ca_cert']):
+        if not os.path.isfile(tls_path):
+            log.error(f"TLS material missing: {tls_path}")
+            sys.exit(1)
+
     enabled_modules = {}
     for mod_name, mod_cfg in config.get('modules', {}).items():
         if mod_cfg.get('enabled', False):
