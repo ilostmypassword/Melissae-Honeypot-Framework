@@ -28,16 +28,16 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #30363d transparent;
+    scrollbar-color: #2a3441 transparent;
   }
 
   ::selection {
-    background: rgba(99, 102, 241, 0.25);
-    color: #e6edf3;
+    background: rgba(127, 142, 163, 0.24);
+    color: #d8dee7;
   }
 
   :focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid #7f8ea3;
     outline-offset: 2px;
   }
 }
@@ -65,7 +65,7 @@
 
   .skeleton {
     @apply rounded-lg animate-shimmer;
-    background: linear-gradient(90deg, #1c2230 25%, #21262d 50%, #1c2230 75%);
+    background: linear-gradient(90deg, #151d27 25%, #202936 50%, #151d27 75%);
     background-size: 200% 100%;
   }
 }

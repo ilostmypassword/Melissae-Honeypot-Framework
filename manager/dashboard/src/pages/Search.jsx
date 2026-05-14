@@ -91,7 +91,7 @@ export default function Search() {
     const optional = [
       { key: 'user', label: 'User', check: l => l.user?.trim() },
       { key: 'action', label: 'Action', always: true },
-      { key: 'cve', label: 'CVE', check: l => l.cve?.trim(), className: 'text-red-400 font-semibold' },
+      { key: 'cve', label: 'CVE', check: l => l.cve?.trim(), className: 'text-verdict-malicious font-semibold' },
       { key: 'user-agent', label: 'User-Agent', check: l => l['user-agent']?.trim(), className: 'max-w-[200px] truncate' },
       { key: 'path', label: 'Path', check: l => l.path?.trim(), className: 'max-w-[200px] truncate' },
     ]

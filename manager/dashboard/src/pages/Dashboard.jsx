@@ -146,7 +146,7 @@ export default function Dashboard() {
             {formatNumber(filteredLogs.length)} logs
           </span>
           <span className="text-[10px] text-text-muted flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse-slow" />
+            <span className="w-1.5 h-1.5 bg-verdict-benign rounded-full animate-pulse-slow" />
             {secondsAgo < 5 ? 'Just now' : `${secondsAgo}s ago`}
           </span>
         </div>

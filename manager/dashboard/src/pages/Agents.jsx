@@ -5,19 +5,19 @@ import { formatTimestampUTC, parseTimestampValue } from '../utils'
 const REFRESH_INTERVAL = 15_000
 
 const statusColors = {
-  healthy: 'bg-green-500',
-  degraded: 'bg-yellow-500',
-  unreachable: 'bg-red-500',
-  pending: 'bg-blue-500',
-  enrolled: 'bg-blue-400',
+  healthy: 'bg-verdict-benign',
+  degraded: 'bg-verdict-suspicious',
+  unreachable: 'bg-verdict-malicious',
+  pending: 'bg-accent',
+  enrolled: 'bg-accent',
 }
 
 const statusText = {
-  healthy: 'text-green-400',
-  degraded: 'text-yellow-400',
-  unreachable: 'text-red-400',
-  pending: 'text-blue-400',
-  enrolled: 'text-blue-300',
+  healthy: 'text-verdict-benign',
+  degraded: 'text-verdict-suspicious',
+  unreachable: 'text-verdict-malicious',
+  pending: 'text-accent',
+  enrolled: 'text-accent',
 }
 
 function formatTime(val) {
@@ -102,13 +102,13 @@ export default function Agents() {
             {total} registered — {healthy} healthy
             {modulesTotal > 0 && (
               <span className="ml-3 text-text-muted">
-                Modules: <span className={modulesRunning === modulesTotal ? 'text-green-400' : 'text-yellow-400'}>{modulesRunning}/{modulesTotal}</span> running
+                Modules: <span className={modulesRunning === modulesTotal ? 'text-verdict-benign' : 'text-verdict-suspicious'}>{modulesRunning}/{modulesTotal}</span> running
               </span>
             )}
           </p>
         </div>
         <span className="text-[10px] text-text-muted flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse-slow" />
+          <span className="w-1.5 h-1.5 bg-verdict-benign rounded-full animate-pulse-slow" />
           {secondsAgo < 5 ? 'Just now' : `${secondsAgo}s ago`}
         </span>
       </div>
@@ -154,13 +154,13 @@ function AgentCard({ agent }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor} ${status === 'healthy' ? 'shadow-[0_0_6px_1px] shadow-green-500/50' : ''}`} />
+          <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor} ${status === 'healthy' ? 'shadow-[0_0_6px_1px] shadow-verdict-benign/35' : ''}`} />
           <span className="font-semibold text-sm text-text-primary truncate">{agent.agent_id}</span>
         </div>
         <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-          status === 'healthy'    ? 'border-green-500/30 bg-green-500/10 text-green-400' :
-          status === 'degraded'   ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400' :
-          status === 'unreachable'? 'border-red-500/30 bg-red-500/10 text-red-400' :
+          status === 'healthy'    ? 'border-verdict-benign/25 bg-verdict-benign/10 text-verdict-benign' :
+          status === 'degraded'   ? 'border-verdict-suspicious/25 bg-verdict-suspicious/10 text-verdict-suspicious' :
+          status === 'unreachable'? 'border-verdict-malicious/25 bg-verdict-malicious/10 text-verdict-malicious' :
           'border-gray-500/30 bg-gray-500/10 text-gray-400'
         }`}>
           {status}
@@ -169,7 +169,7 @@ function AgentCard({ agent }) {
 
       {/* Unreachable notice */}
       {isUnreachable && (
-        <div className="flex items-center gap-2 text-[10px] text-red-400/80 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-[10px] text-verdict-malicious/80 bg-verdict-malicious/5 border border-verdict-malicious/15 rounded-lg px-3 py-2">
           <span className="shrink-0">⚠</span>
           <span>Agent unreachable — data below is from last known check</span>
         </div>
@@ -195,7 +195,7 @@ function AgentCard({ agent }) {
             <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Services</span>
             {!isUnreachable && (
               <span className={`text-[10px] font-mono font-semibold ${
-                stopped.length === 0 ? 'text-green-400' : 'text-yellow-400'
+                stopped.length === 0 ? 'text-verdict-benign' : 'text-verdict-suspicious'
               }`}>
                 {running.length}/{modules.length}
               </span>
@@ -212,7 +212,7 @@ function AgentCard({ agent }) {
                     isUnreachable
                       ? 'bg-gray-500/8 text-gray-500 border-gray-500/15'
                       : isRunning
-                      ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                      ? 'bg-verdict-benign/10 text-verdict-benign border-verdict-benign/20'
                       : 'bg-gray-500/10 text-gray-500 border-gray-500/20 line-through decoration-gray-600'
                   }`}
                 >
@@ -222,7 +222,7 @@ function AgentCard({ agent }) {
             })}
           </div>
           {!isUnreachable && stopped.length > 0 && (
-            <p className="text-[10px] text-yellow-400/70">
+            <p className="text-[10px] text-verdict-suspicious/70">
               {stopped.length} stopped: {stopped.map(m => m.name).join(', ')}
             </p>
           )}
@@ -243,7 +243,7 @@ function InfoCell({ label, value, highlight }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
       <span className="text-[9px] uppercase tracking-wider text-text-muted font-medium">{label}</span>
-      <span className={`font-mono text-[11px] truncate ${highlight ? 'text-yellow-400' : 'text-text-secondary'}`}>{value}</span>
+      <span className={`font-mono text-[11px] truncate ${highlight ? 'text-verdict-suspicious' : 'text-text-secondary'}`}>{value}</span>
     </div>
   )
 }

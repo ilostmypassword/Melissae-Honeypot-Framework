@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compareLogTimestampsDesc } from '../utils'
 
 const PROTOCOL_COLOR = {
-  ssh:    '#5b8db8',
-  http:   '#7aa886',
-  ftp:    '#b08aa0',
-  modbus: '#8a82b0',
-  mqtt:   '#c0926a',
-  telnet: '#b08585',
+  ssh:    '#6f96ad',
+  http:   '#8fa88f',
+  ftp:    '#b18aa0',
+  modbus: '#958bb0',
+  mqtt:   '#b59a75',
+  telnet: '#ad8582',
 }
 
 const CANVAS_W = 1800

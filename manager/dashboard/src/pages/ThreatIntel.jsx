@@ -201,7 +201,7 @@ export default function ThreatIntel() {
 function ThreatChart({ stats }) {
   const verdicts = ['benign', 'suspicious', 'malicious']
   const data = [stats.benign, stats.suspicious, stats.malicious]
-  const colors = ['#4ade80', '#fbbf24', '#f87171']
+  const colors = ['#7aa889', '#c4a36a', '#c07d7d']
 
   return (
     <Bar
@@ -220,11 +220,11 @@ function ThreatChart({ stats }) {
         maintainAspectRatio: false,
         indexAxis: 'y',
         scales: {
-          y: { grid: { display: false }, ticks: { color: '#8b949e' } },
+          y: { grid: { display: false }, ticks: { color: '#9aa4b2' } },
           x: {
             beginAtZero: true,
-            grid: { color: '#151d28' },
-            ticks: { color: '#5a6370' },
+            grid: { color: '#1f2935' },
+            ticks: { color: '#727d8b' },
           },
         },
         plugins: { legend: { display: false } },

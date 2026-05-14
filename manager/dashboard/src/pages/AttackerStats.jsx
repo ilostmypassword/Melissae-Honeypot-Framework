@@ -125,7 +125,7 @@ export default function AttackerStats() {
                 logs={filteredLogs}
                 fieldFn={l => l['user-agent']}
                 emptyLabel="user agent"
-                accent="#86efac"
+                accent="#8fa88f"
                 onItemClick={ua => goSearch(`user-agent:${ua}`)}
                 limit={10}
               />
@@ -136,7 +136,7 @@ export default function AttackerStats() {
                 logs={filteredLogs}
                 fieldFn={l => l.path}
                 emptyLabel="path"
-                accent="#6366f1"
+                accent="#7f8ea3"
                 onItemClick={path => goSearch(`path:${path}`)}
                 limit={10}
               />
@@ -147,7 +147,7 @@ export default function AttackerStats() {
                 logs={filteredLogs}
                 fieldFn={l => l.action}
                 emptyLabel="method"
-                accent="#fdba74"
+                accent="#b59a75"
                 onItemClick={method => goSearch(`action:${method} AND protocol:http`)}
                 limit={8}
               />
