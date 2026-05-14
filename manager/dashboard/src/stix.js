@@ -12,6 +12,52 @@ function sanitizeVerdict(verdict) {
   return allowed.includes(v) ? v : 'unknown'
 }
 
+// Convert a value to a short printable string for STIX descriptions
+function sanitizeText(value, maxLength = 160) {
+  return String(value || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength)
+}
+
+// Format a compact list for human-readable STIX descriptions
+function formatList(values, maxItems = 4) {
+  const items = [...new Set((values || []).map(v => sanitizeText(v)).filter(Boolean))]
+  if (items.length === 0) return null
+  const visible = items.slice(0, maxItems).join(', ')
+  const remaining = items.length - maxItems
+  return remaining > 0 ? `${visible}, +${remaining} more` : visible
+}
+
+// Build a contextual IOC description from Melissae threat data
+function buildIndicatorDescription(threat, ip, verdict, scoreText) {
+  const parts = [
+    `Attacker IP ${ip} was observed by Melissae-Honeypot-Framework and classified as ${verdict} ${scoreText}.`,
+  ]
+
+  if (Number.isFinite(threat.alert_count)) {
+    parts.push(`${threat.alert_count} alert${threat.alert_count === 1 ? '' : 's'} contributed to this assessment.`)
+  }
+
+  const ruleNames = formatList((threat.rules || []).map(rule => rule?.name || rule?.id))
+  if (ruleNames) parts.push(`Matched detection context: ${ruleNames}.`)
+
+  const reasons = formatList(threat.reasons)
+  if (!ruleNames && reasons) parts.push(`Observed activity context: ${reasons}.`)
+
+  const tags = formatList(threat.tags)
+  if (tags) parts.push(`Related tags: ${tags}.`)
+
+  if (threat.first_seen || threat.last_seen) {
+    const firstSeen = sanitizeText(threat.first_seen || 'unknown')
+    const lastSeen = sanitizeText(threat.last_seen || 'unknown')
+    parts.push(`Activity window: first seen ${firstSeen}, last seen ${lastSeen}.`)
+  }
+
+  return parts.join(' ')
+}
+
 // Generate a random UUID v4
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -32,7 +78,7 @@ export function buildStixBundle(threats) {
     id: identityId,
     created: now,
     modified: now,
-    name: 'Melissae',
+    name: 'Melissae-Honeypot-Framework',
     identity_class: 'organization',
   }
 
@@ -50,8 +96,8 @@ export function buildStixBundle(threats) {
       id: `indicator--${uuidv4()}`,
       created: now,
       modified: now,
-      name: `Melissae IOC ${ip}`,
-      description: `${verdict} IP detected on a Melissae honeypot endpoint ${scoreText}`,
+      name: 'Melissae-Honeypot-Framework IOC',
+      description: buildIndicatorDescription(threat, ip, verdict, scoreText),
       labels: ['malicious-activity', verdict],
       pattern_type: 'stix',
       pattern: `[ipv4-addr:value = '${ip}']`,
