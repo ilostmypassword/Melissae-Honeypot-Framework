@@ -17,7 +17,8 @@
     "chart.js": "^4.4.0",
     "react-chartjs-2": "^5.2.0",
     "react-markdown": "^9.0.1",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "jspdf": "^2.5.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

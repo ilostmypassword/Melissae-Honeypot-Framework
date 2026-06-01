@@ -19,6 +19,7 @@ services:
       - MONGO_URI=mongodb://melissae_mongo:27017
       - MONGO_DB=melissae
       - MELISSAE_RULES_DIR=/rules
+      - INSPECTOR_URL=http://melissae_inspector:8088
     volumes:
       - ./pki/ca/certs:/certs:ro
       - ../rules:/rules:ro

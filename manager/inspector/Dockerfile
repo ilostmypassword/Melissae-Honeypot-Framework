@@ -21,4 +21,6 @@ RUN adduser --disabled-password --gecos "" inspector \
     && chown -R inspector:inspector /app
 USER inspector
 
+EXPOSE 8088
+
 ENTRYPOINT ["uv", "run", "--no-sync", "python", "inspector.py"]

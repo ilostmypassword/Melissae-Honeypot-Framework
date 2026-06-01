@@ -944,9 +944,10 @@ _disable_inspector_env() {
 _configure_inspector() {
     echo
     info "Inspector - AI Threat Analyst (optional)"
-    echo -e "  ${DIM}Inspector is a LangChain agent backed by AWS Bedrock. Every 5 minutes it"
-    echo -e "  analyzes all tracked threats and publishes a briefing on the dashboard"
-    echo -e "  home page. It requires AWS Bedrock credentials with model access.${RESET}"
+    echo -e "  ${DIM}Inspector is a LangChain agent backed by AWS Bedrock. It powers the"
+    echo -e "  Inspector page on the dashboard: chat with it and generate on-demand"
+    echo -e "  threat briefings (exportable to PDF). It requires AWS Bedrock"
+    echo -e "  credentials with model access.${RESET}"
     echo
     local enable_inspector
     read -r -p "$(echo -e "${YELLOW}[?]${RESET} Enable Inspector AI analyst? [y/N] ")" enable_inspector

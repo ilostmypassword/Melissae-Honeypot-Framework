@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
@@ -17,6 +18,7 @@ CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in _cors_origins.sp
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://melissae_mongo:27017")
 DB_NAME = os.getenv("MONGO_DB", "melissae")
+INSPECTOR_URL = os.getenv("INSPECTOR_URL", "http://melissae_inspector:8088")
 
 MAX_BATCH_SIZE = 500
 MAX_RESULTS_LOGS = 5000
@@ -268,6 +270,54 @@ def api_inspector_report():
             "counts": {},
         })
     return jsonify(doc)
+
+# Proxy a JSON request to the optional Inspector container and relay its reply
+def _proxy_inspector(path, payload, timeout):
+    url = f"{INSPECTOR_URL.rstrip('/')}{path}"
+    data = json.dumps(payload or {}).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+            return jsonify(json.loads(body)), resp.status
+    except urllib.error.HTTPError as e:
+        try:
+            return jsonify(json.loads(e.read().decode("utf-8"))), e.code
+        except Exception:
+            return jsonify({"error": f"Inspector error {e.code}"}), e.code
+    except urllib.error.URLError:
+        return jsonify({"error": "Inspector is not enabled or unreachable"}), 503
+    except Exception:
+        return jsonify({"error": "Inspector request failed"}), 502
+
+@app.route("/api/inspector/generate", methods=["POST"])
+# POST /api/inspector/generate — Trigger a fresh on-demand threat briefing
+def api_inspector_generate():
+    return _proxy_inspector("/report", {}, timeout=180)
+
+@app.route("/api/inspector/chat", methods=["POST"])
+# POST /api/inspector/chat — Conversational turn with Inspector
+def api_inspector_chat():
+    payload = request.get_json(silent=True) or {}
+    message = _sanitize_str(payload.get("message", ""), 4000)
+    if not message.strip():
+        return jsonify({"error": "message is required"}), 400
+    history = payload.get("history")
+    if not isinstance(history, list):
+        history = []
+    # Keep only the last 20 turns and sanitize each entry
+    safe_history = []
+    for turn in history[-20:]:
+        if not isinstance(turn, dict):
+            continue
+        role = _sanitize_str(turn.get("role", ""), 16)
+        content = _sanitize_str(turn.get("content", ""), 8000)
+        if role and content:
+            safe_history.append({"role": role, "content": content})
+    return _proxy_inspector("/chat", {"message": message, "history": safe_history}, timeout=120)
 
 @app.route("/api/threats", methods=["GET"])
 # GET /api/threats — Threat list with pagination and sorting

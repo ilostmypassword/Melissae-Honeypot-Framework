@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +13,10 @@ from typing import Dict, List
 
 import yaml
 import boto3
+from flask import Flask, jsonify, request
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_aws import ChatBedrock
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -49,7 +52,7 @@ DEFAULT_CONFIG: Dict = {
         "temperature": 0.2,
         "max_tokens": 2048,
     },
-    "inspector": {"poll_interval_seconds": 300, "killchain_limit": 200},
+    "inspector": {"killchain_limit": 200},
 }
 
 
@@ -139,6 +142,7 @@ def build_agent(cfg: Dict) -> AgentExecutor:
     )
     prompt = ChatPromptTemplate.from_messages([
         ("system", build_system_prompt()),
+        MessagesPlaceholder(variable_name="chat_history", optional=True),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
@@ -162,7 +166,7 @@ def _verdict_counts(threats: List[Dict]) -> Dict[str, int]:
     return counts
 
 
-def store_report(db, markdown: str, threats: List[Dict]) -> None:
+def store_report(db, markdown: str, threats: List[Dict]) -> Dict:
     doc = {
         "_id": "latest",
         "markdown": markdown.strip(),
@@ -175,6 +179,7 @@ def store_report(db, markdown: str, threats: List[Dict]) -> None:
         db[REPORT_COLLECTION].replace_one({"_id": "latest"}, doc, upsert=True)
     except PyMongoError as e:
         log.error("Could not store Inspector report: %s", e)
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 
 def _extract_text(result) -> str:
@@ -185,37 +190,102 @@ def _extract_text(result) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Main loop
+# Runtime state
 # --------------------------------------------------------------------------- #
 
-def run_cycle(db, agent: AgentExecutor) -> None:
+app = Flask("inspector")
+
+_LOCK = threading.Lock()   # serialize LLM calls (one Bedrock conversation at a time)
+_STATE: Dict = {"cfg": None, "agent": None, "db": None, "ready": False}
+
+
+def _history_to_messages(history) -> List:
+    """Convert a [{role, content}] chat history into LangChain messages."""
+    messages = []
+    for turn in history or []:
+        if not isinstance(turn, dict):
+            continue
+        role = (turn.get("role") or "").lower()
+        content = (turn.get("content") or "").strip()
+        if not content:
+            continue
+        if role in ("user", "human"):
+            messages.append(HumanMessage(content=content))
+        elif role in ("assistant", "ai", "inspector"):
+            messages.append(AIMessage(content=content))
+    return messages
+
+
+def generate_report() -> Dict:
+    """Run a full threat briefing, store it and return the report document."""
+    db = _STATE["db"]
     try:
         threats = list(db["threats"].find({}, {"_id": 0, "verdict": 1}))
     except PyMongoError as e:
-        log.error("Cannot read threats: %s", e)
-        return
+        raise RuntimeError(f"Cannot read threats: {e}") from e
 
     if not threats:
-        store_report(db, IDLE_BRIEFING, threats)
-        log.info("No threats to analyze; published idle briefing")
-        return
+        log.info("No threats to analyze; publishing idle briefing")
+        return store_report(db, IDLE_BRIEFING, threats)
 
+    with _LOCK:
+        markdown = _extract_text(_STATE["agent"].invoke({"input": KICKOFF}))
+    if not markdown.strip():
+        raise RuntimeError("Model returned an empty briefing")
+
+    report = store_report(db, markdown, threats)
+    log.info("Briefing published (%d threats analyzed)", len(threats))
+    return report
+
+
+# --------------------------------------------------------------------------- #
+# HTTP API
+# --------------------------------------------------------------------------- #
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok" if _STATE["ready"] else "starting"})
+
+
+@app.post("/report")
+def http_report():
+    if not _STATE["ready"]:
+        return jsonify({"error": "Inspector is still starting"}), 503
     try:
-        markdown = _extract_text(agent.invoke({"input": KICKOFF}))
-        if not markdown.strip():
-            log.warning("Empty briefing from model, keeping previous report")
-            return
-        store_report(db, markdown, threats)
-        log.info("Briefing published (%d threats analyzed)", len(threats))
-    except Exception as e:
-        log.error("Failed to generate briefing: %s", e)
+        return jsonify(generate_report())
+    except Exception as e:  # noqa: BLE001 - surface a clean error to the dashboard
+        log.error("Report generation failed: %s", e)
+        return jsonify({"error": str(e)}), 502
 
 
-def main() -> None:
+@app.post("/chat")
+def http_chat():
+    if not _STATE["ready"]:
+        return jsonify({"error": "Inspector is still starting"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    message = (payload.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+
+    history = _history_to_messages(payload.get("history"))
+    try:
+        with _LOCK:
+            result = _STATE["agent"].invoke({"input": message, "chat_history": history})
+        reply = _extract_text(result).strip()
+        return jsonify({"reply": reply or "(no answer)"})
+    except Exception as e:  # noqa: BLE001
+        log.error("Chat turn failed: %s", e)
+        return jsonify({"error": str(e)}), 502
+
+
+# --------------------------------------------------------------------------- #
+# Startup
+# --------------------------------------------------------------------------- #
+
+def init() -> None:
     cfg = load_config(os.getenv("INSPECTOR_CONFIG", str(BASE_DIR / "config.yml")))
-
     tools.KILLCHAIN_LIMIT = int(cfg["inspector"].get("killchain_limit", 200))
-    interval = int(cfg["inspector"].get("poll_interval_seconds", 300))
 
     if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
         log.warning(
@@ -224,8 +294,8 @@ def main() -> None:
         )
 
     log.info(
-        "Inspector starting | model=%s region=%s interval=%ss",
-        cfg["bedrock"]["model_id"], cfg["bedrock"]["region"], interval,
+        "Inspector init | model=%s region=%s",
+        cfg["bedrock"]["model_id"], cfg["bedrock"]["region"],
     )
 
     while True:
@@ -238,14 +308,17 @@ def main() -> None:
             log.warning("MongoDB not ready (%s), retrying in 5s", e)
             time.sleep(5)
 
-    agent = build_agent(cfg)
+    _STATE["cfg"] = cfg
+    _STATE["db"] = tools.DB
+    _STATE["agent"] = build_agent(cfg)
+    _STATE["ready"] = True
+    log.info("Inspector ready — listening for on-demand requests")
 
-    while True:
-        try:
-            run_cycle(tools.DB, agent)
-        except Exception as e:
-            log.error("Unexpected error in cycle: %s", e)
-        time.sleep(interval)
+
+def main() -> None:
+    init()
+    port = int(os.getenv("INSPECTOR_PORT", "8088"))
+    app.run(host="0.0.0.0", port=port, threaded=True)
 
 
 if __name__ == "__main__":

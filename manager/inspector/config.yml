@@ -9,5 +9,4 @@ bedrock:
   max_tokens: 2048
 
 inspector:
-  poll_interval_seconds: 300
   killchain_limit: 200

@@ -36,6 +36,7 @@ const navSections = [
     label: 'Intelligence',
     items: [
       { to: '/threats', label: 'Threat Intelligence', icon: ThreatIcon },
+      { to: '/inspector', label: 'Inspector AI', icon: InspectorIcon },
     ],
   },
 ]
@@ -235,6 +236,16 @@ function ThreatIcon({ active }) {
       <path d="M12 2L2 7l10 5 10-5-10-5z" />
       <path d="M2 17l10 5 10-5" />
       <path d="M2 12l10 5 10-5" />
+    </svg>
+  )
+}
+
+function InspectorIcon({ active }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-colors ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'}`}>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <path d="M8.5 11.5l2 2 3-3.5" />
     </svg>
   )
 }

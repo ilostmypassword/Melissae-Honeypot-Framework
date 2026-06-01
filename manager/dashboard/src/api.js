@@ -41,6 +41,26 @@ export async function fetchInspectorReport() {
   return res.json()
 }
 
+// Trigger Inspector to generate a fresh threat briefing on demand
+export async function generateInspectorReport() {
+  const res = await fetch(`${API_BASE}/inspector/generate`, { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error || `API error ${res.status}`)
+  return data
+}
+
+// Send a conversational message to Inspector with prior history
+export async function sendInspectorChat(message, history = []) {
+  const res = await fetch(`${API_BASE}/inspector/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, history }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error || `API error ${res.status}`)
+  return data
+}
+
 // Fetch registered agents list
 export async function fetchAgents() {
   const res = await fetch(`${API_BASE}/agents`)

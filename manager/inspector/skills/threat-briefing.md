@@ -1,6 +1,6 @@
 # Skill: Threat Briefing
 
-Produce the periodic SOC briefing summarizing the current state of the honeypot
+Produce an on-demand SOC briefing summarizing the current state of the honeypot
 network.
 
 ## Procedure
