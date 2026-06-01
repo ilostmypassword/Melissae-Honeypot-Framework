@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from langchain_core.tools import tool
@@ -252,6 +254,80 @@ def get_agents() -> str:
     return _as_json(docs)
 
 
+# --------------------------------------------------------------------------- #
+# Skills — loaded on demand so the system prompt only carries a short index
+# --------------------------------------------------------------------------- #
+
+SKILLS_DIR = Path(__file__).resolve().parent / "skills"
+
+
+def _expand_tool_refs(text: str) -> str:
+    def repl(match: "re.Match[str]") -> str:
+        names = [n.strip() for n in match.group(1).split(",") if n.strip()]
+        lines = []
+        for name in names:
+            t = TOOLS_BY_NAME.get(name)
+            if t is None:
+                lines.append(f"- `{name}`: (unknown tool)")
+                continue
+            summary = " ".join((t.description or "").split())
+            lines.append(f"- `{name}`: {summary}")
+        return "\n".join(lines)
+
+    return re.sub(r"\{\{tools:([^}]*)\}\}", repl, text)
+
+
+def _skill_meta(path: Path) -> Dict[str, str]:
+    title = path.stem.replace("-", " ").title()
+    summary = ""
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if s.startswith("# Skill:"):
+                title = s[len("# Skill:"):].strip() or title
+            elif s.lower().startswith("**use when:**"):
+                summary = s.split("**", 2)[-1].strip()
+                break
+    except OSError:
+        pass
+    return {"name": path.stem, "title": title, "summary": summary}
+
+
+def skill_names() -> List[str]:
+    if not SKILLS_DIR.is_dir():
+        return []
+    return [p.stem for p in sorted(SKILLS_DIR.glob("*.md"))]
+
+
+def skills_index() -> str:
+    if not SKILLS_DIR.is_dir():
+        return "(no skills available)"
+    lines = []
+    for path in sorted(SKILLS_DIR.glob("*.md")):
+        meta = _skill_meta(path)
+        summary = meta["summary"] or "(no description)"
+        lines.append(f"- `{meta['name']}` — {summary}")
+    return "\n".join(lines) if lines else "(no skills available)"
+
+
+@tool
+def get_skill(name: str) -> str:
+    """Load the full step-by-step procedure for one of Inspektor's named skills,
+    then follow it. Call this before acting on any task that matches a skill in
+    the system-prompt skill index. Available skills: threat-briefing,
+    ip-investigation, attacker-ranking, alert-triage, log-hunting, agent-health."""
+    key = (name or "").strip().lower().replace(" ", "-")
+    if not key:
+        return f"Provide a skill name. Available: {', '.join(skill_names())}"
+    path = SKILLS_DIR / f"{key}.md"
+    if not path.is_file():
+        return f"Unknown skill '{name}'. Available: {', '.join(skill_names())}"
+    try:
+        return _expand_tool_refs(path.read_text(encoding="utf-8")).strip()
+    except OSError as e:
+        return f"Could not load skill '{name}': {e}"
+
+
 TOOLS = [
     get_global_stats,
     list_threats,
@@ -260,6 +336,7 @@ TOOLS = [
     get_recent_alerts,
     search_logs,
     get_agents,
+    get_skill,
 ]
 
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}

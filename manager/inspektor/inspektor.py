@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -95,35 +94,12 @@ def load_config(path: str) -> Dict:
 # Prompt assembly from Markdown
 # --------------------------------------------------------------------------- #
 
-def _expand_tool_refs(text: str) -> str:
-    def repl(match: re.Match) -> str:
-        names = [n.strip() for n in match.group(1).split(",") if n.strip()]
-        lines = []
-        for name in names:
-            t = tools.TOOLS_BY_NAME.get(name)
-            if t is None:
-                lines.append(f"- `{name}`: (unknown tool)")
-                continue
-            summary = " ".join((t.description or "").split())
-            lines.append(f"- `{name}`: {summary}")
-        return "\n".join(lines)
-
-    return re.sub(r"\{\{tools:([^}]*)\}\}", repl, text)
-
-
 def build_system_prompt() -> str:
     system = (BASE_DIR / "prompts" / "system.md").read_text(encoding="utf-8")
-
-    skills_dir = BASE_DIR / "skills"
-    blocks: List[str] = []
-    if skills_dir.is_dir():
-        for skill_file in sorted(skills_dir.glob("*.md")):
-            blocks.append(_expand_tool_refs(skill_file.read_text(encoding="utf-8")).strip())
-    skills_md = "\n\n---\n\n".join(blocks) if blocks else "(no skills defined)"
-
+    index = tools.skills_index()
     if "{{skills}}" in system:
-        return system.replace("{{skills}}", skills_md)
-    return f"{system.rstrip()}\n\n{skills_md}"
+        return system.replace("{{skills}}", index)
+    return f"{system.rstrip()}\n\n{index}"
 
 
 # --------------------------------------------------------------------------- #
