@@ -254,6 +254,72 @@ def get_agents() -> str:
     return _as_json(docs)
 
 
+@tool
+def get_log_overview(top_ips: int = 15) -> str:
+    """Summarize the RAW `logs` collection — the ground-truth SUPERSET of every
+    event the sensors captured, including sources not (yet) scored into `threats`.
+    Returns total events, the number of DISTINCT source IPs actually seen, a
+    per-protocol breakdown, a per-agent breakdown, and the busiest source IPs
+    (each flagged `tracked_in_threats` true/false). Use this in briefings and
+    whenever you need to know what the hive has truly seen — never rely on
+    `threats` or `total_tracked_ips` alone to judge how much activity exists or
+    whether an agent is silent."""
+    if DB is None:
+        return "Database unavailable."
+    try:
+        n = max(1, min(int(top_ips), 50))
+    except (TypeError, ValueError):
+        n = 15
+    try:
+        logs = DB["logs"]
+        total = logs.estimated_document_count()
+        by_protocol = list(logs.aggregate([
+            {"$group": {"_id": "$protocol", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+        ]))
+        by_agent = list(logs.aggregate([
+            {"$group": {"_id": "$agent_id", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+        ]))
+        top = list(logs.aggregate([
+            {"$group": {
+                "_id": "$ip",
+                "events": {"$sum": 1},
+                "protocols": {"$addToSet": "$protocol"},
+                "agents": {"$addToSet": "$agent_id"},
+            }},
+            {"$sort": {"events": -1}},
+            {"$limit": n},
+        ]))
+        distinct_ips = len(logs.distinct("ip"))
+    except PyMongoError as e:
+        return f"Database error: {e}"
+
+    try:
+        tracked = set(DB["threats"].distinct("ip"))
+    except PyMongoError:
+        tracked = set()
+
+    return _as_json({
+        "total_events": total,
+        "distinct_source_ips": distinct_ips,
+        "tracked_in_threats": len(tracked),
+        "untracked_source_ips": max(distinct_ips - len(tracked), 0),
+        "by_protocol": {(d.get("_id") or "unknown"): d["count"] for d in by_protocol},
+        "by_agent": {(d.get("_id") or "unknown"): d["count"] for d in by_agent},
+        "top_source_ips": [
+            {
+                "ip": d.get("_id"),
+                "events": d["events"],
+                "protocols": [p for p in (d.get("protocols") or []) if p],
+                "agents": [a for a in (d.get("agents") or []) if a],
+                "tracked_in_threats": d.get("_id") in tracked,
+            }
+            for d in top
+        ],
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Skills — loaded on demand so the system prompt only carries a short index
 # --------------------------------------------------------------------------- #
@@ -336,6 +402,7 @@ TOOLS = [
     get_recent_alerts,
     search_logs,
     get_agents,
+    get_log_overview,
     get_skill,
 ]
 

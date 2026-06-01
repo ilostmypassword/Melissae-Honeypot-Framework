@@ -5,16 +5,15 @@ attackers", "most active IPs", "who should I worry about", "show malicious IPs".
 
 ## Procedure
 
-1. Call `get_global_stats` for context (how many IPs per verdict, top countries
-   and rules) so your ranking has a denominator.
-2. Call `list_threats` with the relevant `verdict` filter (`malicious` for the
-   worst, omit the filter for an overall top-N) and a sensible `limit`. Results
-   come pre-sorted by score, highest first.
-3. For any IP whose ranking needs justification, call `get_threat` to name the
-   specific rules and MITRE techniques that drove its score. Do this only for the
-   few you actually present.
-4. Rank by score, but call out qualitative differences (a `malicious` IP that got
-   a successful login or CVE hit outranks one that only brute-forced).
+1. **In one batch**, call `get_global_stats` (denominator: IPs per verdict, top
+   countries/rules) and `list_threats` with the relevant `verdict` filter
+   (`malicious` for the worst; omit it for an overall top-N). `list_threats` comes
+   pre-sorted by score, highest first.
+2. Only for the few IPs you will actually present, call `get_threat` to name the
+   rules and MITRE techniques that drove each score. Batch these together; don't
+   pull records for IPs you won't rank.
+3. Rank by score, but call out qualitative differences — a `malicious` IP with a
+   successful login or CVE hit outranks one that only brute-forced.
 
 ## Tools used by this skill
 

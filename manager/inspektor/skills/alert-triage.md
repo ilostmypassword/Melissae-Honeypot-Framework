@@ -6,14 +6,14 @@ last hour", "explain MLS009 hits").
 
 ## Procedure
 
-1. Call `get_recent_alerts` (raise `limit` if a broad window is requested) to get
-   the latest firings: rule id/name, severity, score, IP, agent, MITRE, time.
-2. Group what you see by **rule** and by **severity**, and surface the IPs behind
-   the most severe or most repeated alerts.
-3. For a noteworthy alert, pivot with `get_threat` on its IP to show that IP's
-   full context (cumulative score, verdict, other rules it matched), and
-   `get_killchain` if the operator wants the underlying actions.
-4. Separate signal from noise: many low-severity scans (MLS005/MLS006/MLS012) are
+1. Call `get_recent_alerts` (raise `limit` for a broad window) for the latest
+   firings: rule id/name, severity, score, IP, agent, MITRE, time.
+2. Group by **rule** and **severity**; surface the IPs behind the most severe or
+   most repeated alerts.
+3. For the noteworthy IPs only, drill in one batch: `get_threat` for cumulative
+   score/verdict/other rules, and `get_killchain` if the operator wants the
+   underlying actions.
+4. Separate signal from noise: low-severity scans (MLS005/MLS006/MLS012) are
    background; prioritize critical rules (successful logins, post-exploitation,
    CVE, ICS writes).
 
