@@ -15,6 +15,8 @@
   <img src="https://img.shields.io/badge/Nginx-mTLS-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx mTLS" />
   <img src="https://img.shields.io/badge/Python-3-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/mTLS-ECDSA%20P--384-FF6F00?style=flat-square&logo=letsencrypt&logoColor=white" alt="mTLS" />
+  <img src="https://img.shields.io/badge/AWS%20Bedrock-AI-FF9900?style=flat-square&logo=amazonaws&logoColor=white" alt="AWS Bedrock" />
+  <img src="https://img.shields.io/badge/LangChain-Agent-1C3C3C?style=flat-square&logo=langchain&logoColor=white" alt="LangChain" />
 </p>
 
 ---
@@ -32,6 +34,8 @@ All communications between agents and the manager are authenticated and encrypte
 The framework ships with **7 honeypot modules** : Web (Nginx + Apache), SSH, FTP, Modbus/ICS, MQTT, Telnet. As well as **CVE-specific modules** that reproduce real vulnerabilities to detect targeted exploitation. Modules run in isolated Docker containers and can be enabled or disabled per agent through the interactive CLI or the configuration file.
 
 On the manager side, a **rule-based alerting engine** evaluates each observed IP on a 0–100 scale by accumulating the score of every YAML detection rule that matches its activity (brute-force attempts, successful logins, post-exploitation commands, ICS write operations, CVE exploitation). Results are exposed through an interactive **React dashboard** offering real-time statistics, trend detection, a live attack topology, rule-triggered alerts grouped by IP, a GeoIP attack map, a log search engine with logical operators, agent health monitoring, and STIX 2.1 IOC export.
+
+The manager also embeds **Inspektor**, an AI threat analyst built on **AWS Bedrock** and **LangChain**. Acting as a watcher over the hive, it investigates the live honeypot data through read-only tools and answers questions in a built-in chat, or produces a full **threat briefing** exportable to PDF. Inspektor runs **on demand** as an isolated, internal-only service: it carries the complete framework context (data model, scoring, detection rules) and loads task-specific *skills* (IP investigation, attacker ranking, alert triage, log hunting, agent health, threat briefing) only when needed, keeping each analysis focused and grounded strictly in retrieved data.
 
 <br>
 
@@ -101,6 +105,12 @@ On the manager side, a **rule-based alerting engine** evaluates each observed IP
 <p align="center">
   <img width="1919" height="937" alt="intelligence-threat-intelligence-2" src="https://github.com/user-attachments/assets/94e9cd5a-e14f-4f34-88c1-a0d81d0201f4" />
 </p>
+</details>
+
+<details>
+<summary><strong>Inspektor AI</strong></summary>
+<br>
+
 </details>
 
 ---
