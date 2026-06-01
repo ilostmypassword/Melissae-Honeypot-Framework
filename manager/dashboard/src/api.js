@@ -34,24 +34,24 @@ export async function fetchThreats(agentId) {
   return res.json()
 }
 
-// Fetch the latest AI threat briefing produced by Inspector
-export async function fetchInspectorReport() {
-  const res = await fetch(`${API_BASE}/inspector/report`)
+// Fetch the latest AI threat briefing produced by Inspektor
+export async function fetchInspektorReport() {
+  const res = await fetch(`${API_BASE}/inspektor/report`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }
 
-// Trigger Inspector to generate a fresh threat briefing on demand
-export async function generateInspectorReport() {
-  const res = await fetch(`${API_BASE}/inspector/generate`, { method: 'POST' })
+// Trigger Inspektor to generate a fresh threat briefing on demand
+export async function generateInspektorReport() {
+  const res = await fetch(`${API_BASE}/inspektor/generate`, { method: 'POST' })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.error || `API error ${res.status}`)
   return data
 }
 
-// Send a conversational message to Inspector with prior history
-export async function sendInspectorChat(message, history = []) {
-  const res = await fetch(`${API_BASE}/inspector/chat`, {
+// Send a conversational message to Inspektor with prior history
+export async function sendInspektorChat(message, history = []) {
+  const res = await fetch(`${API_BASE}/inspektor/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, history }),

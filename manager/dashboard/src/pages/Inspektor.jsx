@@ -1,72 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { fetchInspectorReport, generateInspectorReport, sendInspectorChat } from '../api'
-import { mdComponents, timeAgo } from '../components/InspectorMarkdown'
-import { exportReportToPdf } from '../inspectorPdf'
+import { useInspektor } from '../context/InspektorContext'
+import { mdComponents, timeAgo } from '../components/InspektorMarkdown'
+import { exportReportToPdf } from '../inspektorPdf'
 
-let _idSeq = 0
-const nextId = () => `m${Date.now().toString(36)}-${++_idSeq}`
-
-const STORAGE_KEY = 'melissae.inspector.chat'
-
-const INTRO = {
-  id: 'intro',
-  role: 'assistant',
-  kind: 'chat',
-  content:
-    "Hi, I'm **Inspector**, your AI threat analyst. Ask me anything about the honeypot network, or hit **Generate report** for a full threat briefing you can export to PDF.",
-}
-
-function loadStoredMessages() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed
-  } catch {
-    /* ignore corrupted storage */
-  }
-  return null
-}
-
-// Dedicated Inspector page: chat interface + on-demand report + PDF export
-export default function Inspector() {
-  const [messages, setMessages] = useState(() => loadStoredMessages() || [INTRO])
+export default function Inspektor() {
+  const { messages, busy, error, lastMeta, send, runReport, clearChat, markActive } = useInspektor()
   const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const [lastMeta, setLastMeta] = useState(null)
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
-  const restoredRef = useRef(loadStoredMessages() != null)
 
+  // Mark the conversation as actively watched while this page is mounted and
+  // the tab is visible — this resets the unread badge and suppresses notifs.
   useEffect(() => {
-    if (restoredRef.current) return
-    let cancelled = false
-    fetchInspectorReport()
-      .then(data => {
-        if (cancelled || !data?.markdown) return
-        setLastMeta(data)
-        setMessages(prev => [
-          ...prev,
-          { id: nextId(), role: 'assistant', kind: 'report', content: data.markdown, meta: data },
-        ])
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
-
-  // Persist the conversation on every change
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
-    } catch {
+    const sync = () => markActive(!document.hidden)
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      markActive(false)
     }
-    // Track the most recent report for the header timestamp
-    const lastReport = [...messages].reverse().find(m => m.kind === 'report')
-    if (lastReport?.meta) setLastMeta(lastReport.meta)
-  }, [messages])
+  }, [markActive])
 
   // Keep the view pinned to the latest message
   useEffect(() => {
@@ -74,107 +29,56 @@ export default function Inspector() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, busy])
 
-  // Reset the conversation back to a fresh state
-  const clearChat = useCallback(() => {
-    if (busy) return
-    setMessages([INTRO])
-    setLastMeta(null)
-    setError(null)
-    restoredRef.current = false
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      /* ignore */
-    }
-    inputRef.current?.focus()
-  }, [busy])
-
-  const historyFor = useCallback(
-    () =>
-      messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({ role: m.role, content: m.content })),
-    [messages],
-  )
-
-  const send = useCallback(async () => {
+  const onSend = useCallback(() => {
     const text = input.trim()
     if (!text || busy) return
-    setError(null)
-    const userMsg = { id: nextId(), role: 'user', kind: 'chat', content: text }
-    const history = historyFor()
-    setMessages(prev => [...prev, userMsg])
     setInput('')
-    setBusy(true)
-    try {
-      const data = await sendInspectorChat(text, history)
-      setMessages(prev => [
-        ...prev,
-        { id: nextId(), role: 'assistant', kind: 'chat', content: data.reply || '(no answer)' },
-      ])
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-      inputRef.current?.focus()
-    }
-  }, [input, busy, historyFor])
-
-  const runReport = useCallback(async () => {
-    if (busy) return
-    setError(null)
-    setMessages(prev => [
-      ...prev,
-      { id: nextId(), role: 'user', kind: 'chat', content: '📋 Generate a full threat briefing' },
-    ])
-    setBusy(true)
-    try {
-      const data = await generateInspectorReport()
-      setLastMeta(data)
-      setMessages(prev => [
-        ...prev,
-        { id: nextId(), role: 'assistant', kind: 'report', content: data.markdown, meta: data },
-      ])
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }, [busy])
+    send(text)
+    inputRef.current?.focus()
+  }, [input, busy, send])
 
   const onKeyDown = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      send()
+      onSend()
     }
   }
+
+  const isEmpty = messages.length <= 1 && messages[0]?.id === 'intro'
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent/15 text-accent text-lg font-bold shrink-0">
-            I
+          <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-accent/25 to-accent/5 ring-1 ring-accent/30 text-accent shrink-0">
+            <InspektorGlyph />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-surface ${
+                busy ? 'bg-verdict-suspicious animate-pulse' : 'bg-verdict-benign'
+              }`}
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-text-primary tracking-tight">Inspector</h1>
+              <h1 className="text-xl font-semibold text-text-primary tracking-tight">Inspektor</h1>
               <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/15 text-accent">
                 AI Analyst
               </span>
             </div>
             <span className="text-[11px] text-text-muted">
-              {lastMeta?.generated_at
-                ? `Last briefing ${timeAgo(lastMeta.generated_at)}`
-                : 'AI threat analyst — on demand'}
+              {busy
+                ? 'Analyzing the honeypot network…'
+                : lastMeta?.generated_at
+                  ? `Last briefing ${timeAgo(lastMeta.generated_at)}`
+                  : 'AI threat analyst — on demand'}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={clearChat}
-            disabled={busy || (messages.length <= 1 && messages[0]?.id === 'intro')}
+            disabled={busy || isEmpty}
             title="Clear conversation"
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-tertiary text-text-secondary hover:text-verdict-malicious hover:bg-verdict-malicious/10 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -196,23 +100,23 @@ export default function Inspector() {
       {/* Chat stream */}
       <div
         ref={scrollRef}
-        className="glass-card flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0"
+        className="glass-card flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0 scroll-smooth"
       >
         {messages.map(m => (
           <Message key={m.id} msg={m} onExport={exportReportToPdf} />
         ))}
 
         {busy && (
-          <div className="flex items-center gap-2 text-text-muted text-sm">
-            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/15 text-accent text-xs font-bold shrink-0">
-              I
+          <div className="flex items-center gap-2.5 text-text-muted text-sm">
+            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/15 text-accent shrink-0">
+              <InspektorGlyph size={15} />
             </span>
             <span className="flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-xs">Inspector is thinking…</span>
+            <span className="text-xs">Inspektor is thinking… you can keep browsing.</span>
           </div>
         )}
 
@@ -225,18 +129,18 @@ export default function Inspector() {
 
       {/* Composer */}
       <div className="mt-4 shrink-0">
-        <div className="glass-card flex items-end gap-2 p-2">
+        <div className="glass-card flex items-end gap-2 p-2 focus-within:ring-1 focus-within:ring-accent/40 transition-shadow">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="Ask Inspector about attackers, alerts, kill-chains…"
+            placeholder="Ask Inspektor about attackers, alerts, kill-chains…"
             className="flex-1 resize-none bg-transparent px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none max-h-32"
           />
           <button
-            onClick={send}
+            onClick={onSend}
             disabled={busy || !input.trim()}
             className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="Send"
@@ -245,7 +149,7 @@ export default function Inspector() {
           </button>
         </div>
         <p className="text-[10px] text-text-muted mt-1.5 px-1">
-          Inspector runs only when you ask — no automatic polling. Reports can be exported to PDF.
+          Inspektor runs only when you ask — leave the page while it thinks, you'll get a notification when it answers.
         </p>
       </div>
     </div>
@@ -258,7 +162,7 @@ function Message({ msg, onExport }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent/15 text-text-primary px-4 py-2.5 text-sm">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent/15 text-text-primary px-4 py-2.5 text-sm whitespace-pre-wrap">
           {msg.content}
         </div>
       </div>
@@ -266,8 +170,8 @@ function Message({ msg, onExport }) {
   }
   return (
     <div className="flex gap-3">
-      <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/15 text-accent text-xs font-bold shrink-0 mt-0.5">
-        I
+      <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/15 text-accent shrink-0 mt-0.5">
+        <InspektorGlyph size={15} />
       </span>
       <div className="min-w-0 flex-1">
         {msg.kind === 'report' && (
@@ -298,6 +202,17 @@ function Message({ msg, onExport }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// Inspektor brand glyph: a magnifier with a check, matching the navbar item
+function InspektorGlyph({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m20 20-4.5-4.5" />
+      <path d="m8 10.5 1.8 1.8L13 9" />
+    </svg>
   )
 }
 

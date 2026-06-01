@@ -13,14 +13,14 @@ COPY pyproject.toml ./
 COPY uv.lock* ./
 RUN uv sync --no-dev --no-install-project
 
-COPY inspector.py tools.py config.yml ./
+COPY inspektor.py tools.py config.yml ./
 COPY prompts/ ./prompts/
 COPY skills/ ./skills/
 
-RUN adduser --disabled-password --gecos "" inspector \
-    && chown -R inspector:inspector /app
-USER inspector
+RUN adduser --disabled-password --gecos "" inspektor \
+    && chown -R inspektor:inspektor /app
+USER inspektor
 
 EXPOSE 8088
 
-ENTRYPOINT ["uv", "run", "--no-sync", "python", "inspector.py"]
+ENTRYPOINT ["uv", "run", "--no-sync", "python", "inspektor.py"]

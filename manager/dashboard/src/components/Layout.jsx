@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { fetchAlertCounts } from '../api'
+import { useInspektor } from '../context/InspektorContext'
 
 const ALERT_BADGE_REFRESH = 20_000
 
@@ -13,16 +14,18 @@ const navSections = [
     ],
   },
   {
-    label: 'Detection',
+    label: 'Detection & Stats',
     items: [
       { to: '/alerts', label: 'Alerts', icon: AlertIcon, badge: 'alerts' },
+      { to: '/stats/activity', label: 'Traffic', icon: ActivityIcon },
+      { to: '/stats/attackers', label: 'Threats', icon: AttackerIcon },
     ],
   },
   {
-    label: 'Statistics',
+    label: 'Intelligence',
     items: [
-      { to: '/stats/activity', label: 'Traffic', icon: ActivityIcon },
-      { to: '/stats/attackers', label: 'Threats', icon: AttackerIcon },
+      { to: '/inspektor', label: 'Inspektor', icon: InspektorIcon, badge: 'inspektor' },
+      { to: '/threats', label: 'Threat Intelligence', icon: ThreatIcon },
     ],
   },
   {
@@ -32,18 +35,12 @@ const navSections = [
       { to: '/map', label: 'Geo Map', icon: MapIcon },
     ],
   },
-  {
-    label: 'Intelligence',
-    items: [
-      { to: '/threats', label: 'Threat Intelligence', icon: ThreatIcon },
-      { to: '/inspector', label: 'Inspector AI', icon: InspectorIcon },
-    ],
-  },
 ]
 
 // Main application layout with sidebar navigation
 export default function Layout({ children }) {
   const location = useLocation()
+  const { unread: inspektorUnread } = useInspektor()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [alertBadge, setAlertBadge] = useState(0)
 
@@ -75,7 +72,11 @@ export default function Layout({ children }) {
     return () => { cancelled = true; clearInterval(t) }
   }, [])
 
-  const badgeValue = key => (key === 'alerts' ? alertBadge : 0)
+  const badgeValue = key => {
+    if (key === 'alerts') return alertBadge
+    if (key === 'inspektor') return inspektorUnread
+    return 0
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -129,6 +130,9 @@ export default function Layout({ children }) {
                     ? location.pathname === '/'
                     : location.pathname.startsWith(item.to)
                   const badgeCount = item.badge ? badgeValue(item.badge) : 0
+                  const badgeTone = item.badge === 'inspektor'
+                    ? 'bg-accent text-white'
+                    : 'bg-verdict-malicious text-white'
                   return (
                     <NavLink
                       key={item.to}
@@ -145,7 +149,7 @@ export default function Layout({ children }) {
                       <item.icon active={isActive} />
                       <span className="truncate flex-1">{item.label}</span>
                       {badgeCount > 0 && (
-                        <span className="shrink-0 ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-verdict-malicious text-white text-[10px] font-bold leading-none">
+                        <span className={`shrink-0 ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold leading-none ${badgeTone}`}>
                           {badgeCount > 99 ? '99+' : badgeCount}
                         </span>
                       )}
@@ -240,7 +244,7 @@ function ThreatIcon({ active }) {
   )
 }
 
-function InspectorIcon({ active }) {
+function InspektorIcon({ active }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-colors ${active ? 'text-accent' : 'text-text-muted group-hover:text-text-secondary'}`}>
       <circle cx="11" cy="11" r="7" />

@@ -1,21 +1,55 @@
 import { jsPDF } from 'jspdf'
 
 // ----- Layout constants (points, A4) --------------------------------------- //
-const MARGIN = 42
-const HEADER_H = 76
+const MARGIN = 44
+const HEADER_H = 84
 const BODY_FS = 10
-const LINE = 14
+const LINE = 14.5
 
-// ----- Palette ------------------------------------------------------------- //
+// ----- Palette (mirrors tailwind.config.js dashboard tokens) --------------- //
 const COL = {
-  brand: [15, 23, 42],      // slate-900 header band
-  accent: [37, 99, 235],    // blue-600 headings / rules
-  text: [38, 43, 56],       // body text
-  muted: [120, 128, 140],   // meta / footer
-  faint: [226, 230, 236],   // hairlines
-  zebra: [246, 248, 251],   // table odd rows
-  thBg: [37, 99, 235],      // table header background
+  surface: [10, 14, 19],     // #0a0e13  dark header band
+  tertiary: [24, 32, 42],    // #18202a  table header / ink
+  ink: [33, 41, 54],         // body headings
+  text: [46, 53, 66],        // body text (readable on white)
+  accent: [127, 142, 163],   // #7f8ea3  muted slate accent
+  accentDeep: [95, 110, 132],// darker accent for code / rules on white
+  muted: [114, 125, 139],    // #727d8b  meta / footer
+  faint: [223, 228, 234],    // hairlines
+  zebra: [243, 245, 248],    // table odd rows
+  codeBg: [237, 240, 244],   // inline code background
+  headText: [216, 222, 231], // #d8dee7  light text on dark band
   white: [255, 255, 255],
+  benign: [122, 168, 137],   // #7aa889
+  suspicious: [196, 163, 106],// #c4a36a
+  malicious: [192, 125, 125], // #c07d7d
+}
+
+// ----- Logo loading (async, cached) ---------------------------------------- //
+let _logoCache // { dataURL, w, h } | null
+async function loadLogo() {
+  if (_logoCache !== undefined) return _logoCache
+  try {
+    const res = await fetch('/logo.png')
+    if (!res.ok) throw new Error('logo missing')
+    const blob = await res.blob()
+    const dataURL = await new Promise((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result)
+      fr.onerror = reject
+      fr.readAsDataURL(blob)
+    })
+    const dims = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+      img.onerror = () => resolve({ w: 1, h: 1 })
+      img.src = dataURL
+    })
+    _logoCache = { dataURL, w: dims.w, h: dims.h }
+  } catch {
+    _logoCache = null
+  }
+  return _logoCache
 }
 
 // ----- Inline tokenizer ---------------------------------------------------- //
@@ -55,16 +89,17 @@ function wordsFromSegments(segments) {
   return words
 }
 
+// One consistent typeface family (Helvetica) throughout — no Courier mixing.
 function fontFor(doc, w) {
-  if (w.code) doc.setFont('courier', w.bold ? 'bold' : 'normal')
-  else if (w.bold && w.italic) doc.setFont('helvetica', 'bolditalic')
+  if (w.bold && w.italic) doc.setFont('helvetica', 'bolditalic')
   else if (w.bold) doc.setFont('helvetica', 'bold')
   else if (w.italic) doc.setFont('helvetica', 'italic')
   else doc.setFont('helvetica', 'normal')
 }
 
 // ----- Document builder ---------------------------------------------------- //
-export function exportReportToPdf(markdown, meta = {}) {
+export async function exportReportToPdf(markdown, meta = {}) {
+  const logo = await loadLogo()
   const doc = new jsPDF({ unit: 'pt', format: 'a4', compress: true })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -88,20 +123,28 @@ export function exportReportToPdf(markdown, meta = {}) {
 
   // Branded header band (page 1 only)
   const drawHeader = () => {
-    setFill(COL.brand)
+    setFill(COL.surface)
     doc.rect(0, 0, pageW, HEADER_H, 'F')
+    // thin accent rule along the bottom of the band
     setFill(COL.accent)
-    doc.roundedRect(MARGIN, 22, 30, 30, 6, 6, 'F')
+    doc.rect(0, HEADER_H - 2, pageW, 2, 'F')
+
+    let textX = MARGIN
+    if (logo) {
+      const boxH = 34
+      const w = Math.max(1, (logo.w / logo.h) * boxH)
+      doc.addImage(logo.dataURL, 'PNG', MARGIN, (HEADER_H - boxH) / 2 - 4, w, boxH)
+      textX = MARGIN + w + 16
+    }
+
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(17)
     setText(COL.white)
-    doc.text('I', MARGIN + 15, 43, { align: 'center' })
-    doc.setFontSize(17)
-    doc.text('Inspector — Threat Briefing', MARGIN + 44, 38)
+    doc.text('Inspektor — Threat Briefing', textX, 38)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
-    setText([170, 178, 190])
-    doc.text('Melissae Honeypot Framework · AI Threat Analyst', MARGIN + 44, 54)
+    setText(COL.headText)
+    doc.text('Melissae Honeypot Framework · AI Threat Analyst', textX, 54)
     y = HEADER_H + 26
   }
 
@@ -136,9 +179,17 @@ export function exportReportToPdf(markdown, meta = {}) {
       let lx = x
       for (const w of lineWords) {
         fontFor(doc, w)
-        setText(w.code ? COL.accent : color)
+        const ww = doc.getTextWidth(w.text)
+        if (w.code && !w.space) {
+          // subtle highlight box instead of a different typeface
+          setFill(COL.codeBg)
+          doc.roundedRect(lx - 1.5, y - fs + 2.5, ww + 3, fs + 2, 2, 2, 'F')
+          setText(COL.accentDeep)
+        } else {
+          setText(color)
+        }
         doc.text(w.text, lx, y)
-        lx += doc.getTextWidth(w.text)
+        lx += ww
       }
       lineWords = []
     }
@@ -192,26 +243,26 @@ export function exportReportToPdf(markdown, meta = {}) {
       const h = rowHeight(cells, colW, fs)
       ensure(h)
       const top = y
-      if (kind === 'head') { setFill(COL.thBg); doc.rect(MARGIN, top, usableW, h, 'F') }
+      if (kind === 'head') { setFill(COL.tertiary); doc.rect(MARGIN, top, usableW, h, 'F') }
       else if (idx % 2 === 1) { setFill(COL.zebra); doc.rect(MARGIN, top, usableW, h, 'F') }
 
       let x = MARGIN
       cells.forEach((c, ci) => {
         doc.setFont('helvetica', kind === 'head' ? 'bold' : 'normal')
         doc.setFontSize(fs)
-        setText(kind === 'head' ? COL.white : COL.text)
+        setText(kind === 'head' ? COL.headText : COL.text)
         const wrapped = doc.splitTextToSize(stripBasic(c || ''), colW[ci] - padX * 2)
         doc.text(wrapped, x + padX, top + padY + fs)
         x += colW[ci]
       })
 
-      setDraw(kind === 'head' ? COL.thBg : COL.faint)
+      // vertical separators on body rows
+      setDraw(COL.faint)
       doc.setLineWidth(0.5)
       for (let ci = 1; ci < cols && kind !== 'head'; ci++) {
-        doc.line(MARGIN + colW.slice(0, ci).reduce((a, b) => a + b, 0), top,
-                 MARGIN + colW.slice(0, ci).reduce((a, b) => a + b, 0), top + h)
+        const lineX = MARGIN + colW.slice(0, ci).reduce((a, b) => a + b, 0)
+        doc.line(lineX, top, lineX, top + h)
       }
-      setDraw(COL.faint)
       doc.line(MARGIN, top + h, pageW - MARGIN, top + h)
       y += h
     }
@@ -220,7 +271,7 @@ export function exportReportToPdf(markdown, meta = {}) {
     drawRow(header, 'head', 0)
     rows.forEach((r, ri) => drawRow(r, 'body', ri))
 
-    // Outer border around the whole table (handles single-page tables)
+    // Outer border around the whole table (single-page tables)
     if (y > startY) {
       setDraw(COL.faint)
       doc.setLineWidth(0.6)
@@ -232,9 +283,9 @@ export function exportReportToPdf(markdown, meta = {}) {
   const renderListItem = (marker, text) => {
     const indent = 16
     ensure(LINE)
-    doc.setFont('helvetica', marker === '•' ? 'bold' : 'normal')
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(BODY_FS)
-    setText(COL.accent)
+    setText(COL.accentDeep)
     doc.text(marker, MARGIN + 2, y)
     drawRich(text, MARGIN + indent, usableW - indent)
   }
@@ -252,12 +303,22 @@ export function exportReportToPdf(markdown, meta = {}) {
 
     if (!line) { y += LINE * 0.5; orderedIdx = 0; i++; continue }
 
+    // Horizontal rule
+    if (/^([-*_])\1{2,}$/.test(line)) {
+      ensure(LINE)
+      setDraw(COL.faint)
+      doc.setLineWidth(0.6)
+      doc.line(MARGIN, y - 4, pageW - MARGIN, y - 4)
+      y += LINE * 0.6
+      orderedIdx = 0; i++; continue
+    }
+
     if (line.startsWith('### ')) {
       ensure(LINE * 2)
       y += 6
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(10.5)
-      setText(COL.accent)
+      setText(COL.accentDeep)
       doc.text(stripBasic(line.slice(4)).toUpperCase(), MARGIN, y)
       y += LINE + 2
       orderedIdx = 0; i++; continue
@@ -267,7 +328,7 @@ export function exportReportToPdf(markdown, meta = {}) {
       y += 10
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(14)
-      setText(COL.brand)
+      setText(COL.ink)
       doc.text(stripBasic(line.slice(3)), MARGIN, y)
       y += 8
       setDraw(COL.accent)
@@ -281,7 +342,7 @@ export function exportReportToPdf(markdown, meta = {}) {
       y += 8
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(16)
-      setText(COL.brand)
+      setText(COL.ink)
       doc.text(stripBasic(line.slice(2)), MARGIN, y)
       y += LINE * 1.5
       orderedIdx = 0; i++; continue
@@ -332,13 +393,13 @@ export function exportReportToPdf(markdown, meta = {}) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     setText(COL.muted)
-    doc.text('Melissae · Inspector', MARGIN, pageH - MARGIN + 16)
+    doc.text('Melissae · Inspektor', MARGIN, pageH - MARGIN + 16)
     doc.text(`Page ${p} of ${pages}`, pageW / 2, pageH - MARGIN + 16, { align: 'center' })
     doc.text(stampStr, pageW - MARGIN, pageH - MARGIN + 16, { align: 'right' })
   }
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  doc.save(`inspector-briefing-${stamp}.pdf`)
+  doc.save(`inspektor-briefing-${stamp}.pdf`)
 }
 
 // Strip markdown emphasis markers for plain-text contexts (headings, tables).

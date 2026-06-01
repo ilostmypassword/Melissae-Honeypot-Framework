@@ -28,10 +28,10 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-log = logging.getLogger("inspector")
+log = logging.getLogger("inspektor")
 
 BASE_DIR = Path(__file__).resolve().parent
-REPORT_COLLECTION = "inspector_report"
+REPORT_COLLECTION = "inspektor_report"
 
 KICKOFF = "Produce the current threat briefing for the Melissae honeypot network."
 
@@ -52,7 +52,7 @@ DEFAULT_CONFIG: Dict = {
         "temperature": 0.2,
         "max_tokens": 2048,
     },
-    "inspector": {"killchain_limit": 200},
+    "inspektor": {"killchain_limit": 200},
 }
 
 
@@ -178,7 +178,7 @@ def store_report(db, markdown: str, threats: List[Dict]) -> Dict:
     try:
         db[REPORT_COLLECTION].replace_one({"_id": "latest"}, doc, upsert=True)
     except PyMongoError as e:
-        log.error("Could not store Inspector report: %s", e)
+        log.error("Could not store Inspektor report: %s", e)
     return {k: v for k, v in doc.items() if k != "_id"}
 
 
@@ -193,7 +193,7 @@ def _extract_text(result) -> str:
 # Runtime state
 # --------------------------------------------------------------------------- #
 
-app = Flask("inspector")
+app = Flask("inspektor")
 
 _LOCK = threading.Lock()   # serialize LLM calls (one Bedrock conversation at a time)
 _STATE: Dict = {"cfg": None, "agent": None, "db": None, "ready": False}
@@ -211,7 +211,7 @@ def _history_to_messages(history) -> List:
             continue
         if role in ("user", "human"):
             messages.append(HumanMessage(content=content))
-        elif role in ("assistant", "ai", "inspector"):
+        elif role in ("assistant", "ai", "inspektor"):
             messages.append(AIMessage(content=content))
     return messages
 
@@ -250,7 +250,7 @@ def health():
 @app.post("/report")
 def http_report():
     if not _STATE["ready"]:
-        return jsonify({"error": "Inspector is still starting"}), 503
+        return jsonify({"error": "Inspektor is still starting"}), 503
     try:
         return jsonify(generate_report())
     except Exception as e:  # noqa: BLE001 - surface a clean error to the dashboard
@@ -261,7 +261,7 @@ def http_report():
 @app.post("/chat")
 def http_chat():
     if not _STATE["ready"]:
-        return jsonify({"error": "Inspector is still starting"}), 503
+        return jsonify({"error": "Inspektor is still starting"}), 503
 
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
@@ -284,8 +284,8 @@ def http_chat():
 # --------------------------------------------------------------------------- #
 
 def init() -> None:
-    cfg = load_config(os.getenv("INSPECTOR_CONFIG", str(BASE_DIR / "config.yml")))
-    tools.KILLCHAIN_LIMIT = int(cfg["inspector"].get("killchain_limit", 200))
+    cfg = load_config(os.getenv("INSPEKTOR_CONFIG", str(BASE_DIR / "config.yml")))
+    tools.KILLCHAIN_LIMIT = int(cfg["inspektor"].get("killchain_limit", 200))
 
     if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
         log.warning(
@@ -294,7 +294,7 @@ def init() -> None:
         )
 
     log.info(
-        "Inspector init | model=%s region=%s",
+        "Inspektor init | model=%s region=%s",
         cfg["bedrock"]["model_id"], cfg["bedrock"]["region"],
     )
 
@@ -312,12 +312,12 @@ def init() -> None:
     _STATE["db"] = tools.DB
     _STATE["agent"] = build_agent(cfg)
     _STATE["ready"] = True
-    log.info("Inspector ready — listening for on-demand requests")
+    log.info("Inspektor ready — listening for on-demand requests")
 
 
 def main() -> None:
     init()
-    port = int(os.getenv("INSPECTOR_PORT", "8088"))
+    port = int(os.getenv("INSPEKTOR_PORT", "8088"))
     app.run(host="0.0.0.0", port=port, threaded=True)
 
 

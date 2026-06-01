@@ -18,7 +18,7 @@ CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in _cors_origins.sp
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://melissae_mongo:27017")
 DB_NAME = os.getenv("MONGO_DB", "melissae")
-INSPECTOR_URL = os.getenv("INSPECTOR_URL", "http://melissae_inspector:8088")
+INSPEKTOR_URL = os.getenv("INSPEKTOR_URL", "http://melissae_inspektor:8088")
 
 MAX_BATCH_SIZE = 500
 MAX_RESULTS_LOGS = 5000
@@ -254,12 +254,12 @@ def api_logs_stats():
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
 
-@app.route("/api/inspector/report", methods=["GET"])
-# GET /api/inspector/report — Latest AI threat briefing by Inspector
-def api_inspector_report():
+@app.route("/api/inspektor/report", methods=["GET"])
+# GET /api/inspektor/report — Latest AI threat briefing by Inspektor
+def api_inspektor_report():
     try:
         db = get_db()
-        doc = db["inspector_report"].find_one({"_id": "latest"}, {"_id": 0})
+        doc = db["inspektor_report"].find_one({"_id": "latest"}, {"_id": 0})
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
     if not doc:
@@ -271,9 +271,9 @@ def api_inspector_report():
         })
     return jsonify(doc)
 
-# Proxy a JSON request to the optional Inspector container and relay its reply
-def _proxy_inspector(path, payload, timeout):
-    url = f"{INSPECTOR_URL.rstrip('/')}{path}"
+# Proxy a JSON request to the optional Inspektor container and relay its reply
+def _proxy_inspektor(path, payload, timeout):
+    url = f"{INSPEKTOR_URL.rstrip('/')}{path}"
     data = json.dumps(payload or {}).encode("utf-8")
     req = urllib.request.Request(
         url, data=data, method="POST",
@@ -287,20 +287,20 @@ def _proxy_inspector(path, payload, timeout):
         try:
             return jsonify(json.loads(e.read().decode("utf-8"))), e.code
         except Exception:
-            return jsonify({"error": f"Inspector error {e.code}"}), e.code
+            return jsonify({"error": f"Inspektor error {e.code}"}), e.code
     except urllib.error.URLError:
-        return jsonify({"error": "Inspector is not enabled or unreachable"}), 503
+        return jsonify({"error": "Inspektor is not enabled or unreachable"}), 503
     except Exception:
-        return jsonify({"error": "Inspector request failed"}), 502
+        return jsonify({"error": "Inspektor request failed"}), 502
 
-@app.route("/api/inspector/generate", methods=["POST"])
-# POST /api/inspector/generate — Trigger a fresh on-demand threat briefing
-def api_inspector_generate():
-    return _proxy_inspector("/report", {}, timeout=180)
+@app.route("/api/inspektor/generate", methods=["POST"])
+# POST /api/inspektor/generate — Trigger a fresh on-demand threat briefing
+def api_inspektor_generate():
+    return _proxy_inspektor("/report", {}, timeout=180)
 
-@app.route("/api/inspector/chat", methods=["POST"])
-# POST /api/inspector/chat — Conversational turn with Inspector
-def api_inspector_chat():
+@app.route("/api/inspektor/chat", methods=["POST"])
+# POST /api/inspektor/chat — Conversational turn with Inspektor
+def api_inspektor_chat():
     payload = request.get_json(silent=True) or {}
     message = _sanitize_str(payload.get("message", ""), 4000)
     if not message.strip():
@@ -317,7 +317,7 @@ def api_inspector_chat():
         content = _sanitize_str(turn.get("content", ""), 8000)
         if role and content:
             safe_history.append({"role": role, "content": content})
-    return _proxy_inspector("/chat", {"message": message, "history": safe_history}, timeout=120)
+    return _proxy_inspektor("/chat", {"message": message, "history": safe_history}, timeout=120)
 
 @app.route("/api/threats", methods=["GET"])
 # GET /api/threats — Threat list with pagination and sorting

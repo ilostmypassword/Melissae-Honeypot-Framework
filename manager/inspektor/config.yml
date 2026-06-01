@@ -8,5 +8,5 @@ bedrock:
   temperature: 0.2
   max_tokens: 2048
 
-inspector:
+inspektor:
   killchain_limit: 200

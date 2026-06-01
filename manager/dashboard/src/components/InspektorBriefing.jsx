@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchInspectorReport } from '../api'
-import { timeAgo } from './InspectorMarkdown'
+import { fetchInspektorReport } from '../api'
+import { timeAgo } from './InspektorMarkdown'
 
-// Compact Inspector teaser card for the dashboard home page.
-export default function InspectorBriefing() {
+// Compact Inspektor teaser card for the dashboard home page.
+export default function InspektorBriefing() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    fetchInspectorReport()
+    fetchInspektorReport()
       .then(data => { if (!cancelled) setReport(data?.markdown ? data : null) })
       .catch(() => { if (!cancelled) setReport(null) })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -22,7 +22,7 @@ export default function InspectorBriefing() {
 
   return (
     <Link
-      to="/inspector"
+      to="/inspektor"
       className="glass-card p-5 relative overflow-hidden block group hover:border-accent/40 transition-colors"
     >
       <div className="absolute -top-16 -right-16 w-48 h-48 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
@@ -34,7 +34,7 @@ export default function InspectorBriefing() {
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-text-primary tracking-tight">Inspector</span>
+            <span className="text-sm font-bold text-text-primary tracking-tight">Inspektor</span>
             <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/15 text-accent">
               AI Analyst
             </span>
@@ -56,7 +56,7 @@ export default function InspectorBriefing() {
             </div>
           ) : (
             <p className="text-[11px] text-text-muted mt-1.5">
-              Chat with the Inspector and generate threat briefings on demand.
+              Chat with Inspektor and generate threat briefings on demand.
             </p>
           )}
         </div>

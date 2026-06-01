@@ -19,7 +19,7 @@ services:
       - MONGO_URI=mongodb://melissae_mongo:27017
       - MONGO_DB=melissae
       - MELISSAE_RULES_DIR=/rules
-      - INSPECTOR_URL=http://melissae_inspector:8088
+      - INSPEKTOR_URL=http://melissae_inspektor:8088
     volumes:
       - ./pki/ca/certs:/certs:ro
       - ../rules:/rules:ro
@@ -49,13 +49,13 @@ services:
       - melissae_api
       - melissae_mongo
 
-  melissae_inspector:
+  melissae_inspektor:
     build:
-      context: ./inspector
+      context: ./inspektor
       dockerfile: Dockerfile
-    container_name: melissae_inspector
+    container_name: melissae_inspektor
     restart: unless-stopped
-    profiles: ["inspector"]
+    profiles: ["inspektor"]
     environment:
       - MONGO_URI=mongodb://melissae_mongo:27017
       - MONGO_DB=melissae
@@ -65,7 +65,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
     volumes:
-      - ./inspector/config.yml:/app/config.yml:ro
+      - ./inspektor/config.yml:/app/config.yml:ro
     depends_on:
       - melissae_mongo
       - melissae_api

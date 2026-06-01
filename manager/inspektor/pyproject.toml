@@ -1,7 +1,7 @@
 [project]
-name = "inspector"
+name = "inspektor"
 version = "1.0.0"
-description = "Inspector — Melissae AI threat analyst"
+description = "Inspektor — Melissae AI threat analyst"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

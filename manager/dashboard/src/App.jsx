@@ -12,6 +12,7 @@ import {
 } from 'chart.js'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
+import { InspektorProvider } from './context/InspektorContext'
 import Dashboard from './pages/Dashboard'
 import Search from './pages/Search'
 import ThreatIntel from './pages/ThreatIntel'
@@ -20,7 +21,7 @@ import Agents from './pages/Agents'
 import ActivityStats from './pages/ActivityStats'
 import AttackerStats from './pages/AttackerStats'
 import Alerts from './pages/Alerts'
-import Inspector from './pages/Inspector'
+import Inspektor from './pages/Inspektor'
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement,
@@ -30,20 +31,22 @@ ChartJS.register(
 // Root application component with routing
 export default function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/inspector" element={<Inspector />} />
-        <Route path="/alerts" element={<Alerts />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/threats" element={<ThreatIntel />} />
-        <Route path="/map" element={<Map />} />
-        <Route path="/agents" element={<Agents />} />
-        <Route path="/stats/activity" element={<ActivityStats />} />
-        <Route path="/stats/attackers" element={<AttackerStats />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+    <InspektorProvider>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/inspektor" element={<Inspektor />} />
+          <Route path="/alerts" element={<Alerts />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/threats" element={<ThreatIntel />} />
+          <Route path="/map" element={<Map />} />
+          <Route path="/agents" element={<Agents />} />
+          <Route path="/stats/activity" element={<ActivityStats />} />
+          <Route path="/stats/attackers" element={<AttackerStats />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
+    </InspektorProvider>
   )
 }
 
