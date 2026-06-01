@@ -252,6 +252,23 @@ def api_logs_stats():
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
 
+@app.route("/api/inspector/report", methods=["GET"])
+# GET /api/inspector/report — Latest AI threat briefing by Inspector
+def api_inspector_report():
+    try:
+        db = get_db()
+        doc = db["inspector_report"].find_one({"_id": "latest"}, {"_id": 0})
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+    if not doc:
+        return jsonify({
+            "markdown": "",
+            "generated_at": None,
+            "threats_analyzed": 0,
+            "counts": {},
+        })
+    return jsonify(doc)
+
 @app.route("/api/threats", methods=["GET"])
 # GET /api/threats — Threat list with pagination and sorting
 def api_threats():

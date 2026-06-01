@@ -34,6 +34,13 @@ export async function fetchThreats(agentId) {
   return res.json()
 }
 
+// Fetch the latest AI threat briefing produced by Inspector
+export async function fetchInspectorReport() {
+  const res = await fetch(`${API_BASE}/inspector/report`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  return res.json()
+}
+
 // Fetch registered agents list
 export async function fetchAgents() {
   const res = await fetch(`${API_BASE}/agents`)

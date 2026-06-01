@@ -48,6 +48,27 @@ services:
       - melissae_api
       - melissae_mongo
 
+  melissae_inspector:
+    build:
+      context: ./inspector
+      dockerfile: Dockerfile
+    container_name: melissae_inspector
+    restart: unless-stopped
+    profiles: ["inspector"]
+    environment:
+      - MONGO_URI=mongodb://melissae_mongo:27017
+      - MONGO_DB=melissae
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-anthropic.claude-3-5-sonnet-20240620-v1:0}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+    volumes:
+      - ./inspector/config.yml:/app/config.yml:ro
+    depends_on:
+      - melissae_mongo
+      - melissae_api
+
 volumes:
   mongo_data:
 

@@ -1,0 +1,13 @@
+mongo:
+  uri: "mongodb://melissae_mongo:27017"
+  db: "melissae"
+
+bedrock:
+  region: "us-east-1"
+  model_id: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+  temperature: 0.2
+  max_tokens: 2048
+
+inspector:
+  poll_interval_seconds: 300
+  killchain_limit: 200
