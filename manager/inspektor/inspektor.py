@@ -255,7 +255,7 @@ def http_report():
         return jsonify(generate_report())
     except Exception as e:  # noqa: BLE001 - surface a clean error to the dashboard
         log.error("Report generation failed: %s", e)
-        return jsonify({"error": str(e)}), 502
+        return jsonify({"error": "Report generation failed"}), 502
 
 
 @app.post("/chat")
@@ -276,7 +276,7 @@ def http_chat():
         return jsonify({"reply": reply or "(no answer)"})
     except Exception as e:  # noqa: BLE001
         log.error("Chat turn failed: %s", e)
-        return jsonify({"error": str(e)}), 502
+        return jsonify({"error": "Inspektor could not process this request"}), 502
 
 
 # --------------------------------------------------------------------------- #

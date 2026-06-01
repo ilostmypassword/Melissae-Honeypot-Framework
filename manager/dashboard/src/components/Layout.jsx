@@ -164,7 +164,7 @@ export default function Layout({ children }) {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-border">
           <p className="text-[9px] text-text-muted uppercase tracking-[0.2em]">
-            v2.5
+            v2.6
           </p>
         </div>
       </nav>

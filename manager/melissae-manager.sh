@@ -6,7 +6,7 @@ WORKING_DIRECTORY=$(cd "$(dirname "$0")" && pwd)
 cd "$WORKING_DIRECTORY" || exit 1
 compose_cmd=()
 COMPOSE_FILE="docker-compose.yml"
-VERSION="2.5"
+VERSION="2.6"
 PKI_DIR="$WORKING_DIRECTORY/pki/ca"
 CERTS_DIR="$PKI_DIR/certs"
 ENV_FILE="$WORKING_DIRECTORY/.env"

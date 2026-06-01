@@ -203,8 +203,12 @@ export function InspektorProvider({ children }) {
           className="fixed bottom-5 right-5 z-[60] max-w-sm text-left animate-fade-in"
         >
           <div className="glass-card border border-accent/40 shadow-lg p-3.5 flex gap-3 items-start hover:border-accent/70 transition-colors">
-            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent/15 text-accent text-sm font-bold shrink-0">
-              I
+            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent/15 text-accent shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="m20 20-4.5-4.5" />
+                <path d="m8 10.5 1.8 1.8L13 9" />
+              </svg>
             </span>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-text-primary">{toast.title}</div>
