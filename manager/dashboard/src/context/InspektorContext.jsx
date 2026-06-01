@@ -14,7 +14,7 @@ export const INTRO = {
   role: 'assistant',
   kind: 'chat',
   content:
-    "Hi, I'm **Inspektor**, your AI threat analyst. Ask me anything about the honeypot network, or hit **Generate report** for a full threat briefing you can export to PDF.",
+    "I'm **Inspektor**, the watcher over the Melissae hive. Ask me anything about the honeypot network, or hit **Generate report** for a full threat briefing you can export to PDF.",
 }
 
 function loadStored() {

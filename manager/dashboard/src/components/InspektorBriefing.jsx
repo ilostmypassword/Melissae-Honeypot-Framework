@@ -169,8 +169,8 @@ export default function InspektorBriefing() {
         ) : (
           <div className="flex flex-col items-start gap-3">
             <p className="text-[12.5px] text-text-secondary leading-relaxed">
-              No briefing yet. Let Inspektor analyze the whole honeypot network and
-              produce a SOC-ready threat summary.
+              No briefing yet. Let Inspektor read the whole hive and produce a
+              SOC-ready threat summary.
             </p>
             <button
               onClick={onGenerate}

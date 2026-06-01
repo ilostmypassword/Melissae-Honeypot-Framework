@@ -68,7 +68,7 @@ export default function Inspektor() {
             </div>
             <span className="text-[11px] text-text-muted">
               {busy
-                ? 'Analyzing the honeypot network…'
+                ? 'Reading the hive…'
                 : lastMeta?.generated_at
                   ? `Last briefing ${timeAgo(lastMeta.generated_at)}`
                   : 'AI threat analyst — on demand'}
@@ -116,7 +116,7 @@ export default function Inspektor() {
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-xs">Inspektor is thinking… you can keep browsing.</span>
+            <span className="text-xs">Inspektor is reading the hive… you can keep browsing.</span>
           </div>
         )}
 
