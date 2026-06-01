@@ -6,28 +6,43 @@ import { mdComponents, timeAgo } from '../components/InspectorMarkdown'
 import { exportReportToPdf } from '../inspectorPdf'
 
 let _idSeq = 0
-const nextId = () => `m${++_idSeq}`
+const nextId = () => `m${Date.now().toString(36)}-${++_idSeq}`
+
+const STORAGE_KEY = 'melissae.inspector.chat'
 
 const INTRO = {
-  id: nextId(),
+  id: 'intro',
   role: 'assistant',
   kind: 'chat',
   content:
     "Hi, I'm **Inspector**, your AI threat analyst. Ask me anything about the honeypot network, or hit **Generate report** for a full threat briefing you can export to PDF.",
 }
 
+function loadStoredMessages() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed
+  } catch {
+    /* ignore corrupted storage */
+  }
+  return null
+}
+
 // Dedicated Inspector page: chat interface + on-demand report + PDF export
 export default function Inspector() {
-  const [messages, setMessages] = useState([INTRO])
+  const [messages, setMessages] = useState(() => loadStoredMessages() || [INTRO])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [lastMeta, setLastMeta] = useState(null)
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
+  const restoredRef = useRef(loadStoredMessages() != null)
 
-  // Load the last stored briefing (if any) on mount
   useEffect(() => {
+    if (restoredRef.current) return
     let cancelled = false
     fetchInspectorReport()
       .then(data => {
@@ -35,24 +50,44 @@ export default function Inspector() {
         setLastMeta(data)
         setMessages(prev => [
           ...prev,
-          {
-            id: nextId(),
-            role: 'assistant',
-            kind: 'report',
-            content: data.markdown,
-            meta: data,
-          },
+          { id: nextId(), role: 'assistant', kind: 'report', content: data.markdown, meta: data },
         ])
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
 
+  // Persist the conversation on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    } catch {
+    }
+    // Track the most recent report for the header timestamp
+    const lastReport = [...messages].reverse().find(m => m.kind === 'report')
+    if (lastReport?.meta) setLastMeta(lastReport.meta)
+  }, [messages])
+
   // Keep the view pinned to the latest message
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, busy])
+
+  // Reset the conversation back to a fresh state
+  const clearChat = useCallback(() => {
+    if (busy) return
+    setMessages([INTRO])
+    setLastMeta(null)
+    setError(null)
+    restoredRef.current = false
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+    inputRef.current?.focus()
+  }, [busy])
 
   const historyFor = useCallback(
     () =>
@@ -136,15 +171,26 @@ export default function Inspector() {
             </span>
           </div>
         </div>
-        <button
-          onClick={runReport}
-          disabled={busy}
-          className="shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-accent/15 text-accent hover:bg-accent/25 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <ReportIcon />
-          <span className="hidden sm:inline">Generate report</span>
-          <span className="sm:hidden">Report</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={clearChat}
+            disabled={busy || (messages.length <= 1 && messages[0]?.id === 'intro')}
+            title="Clear conversation"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-tertiary text-text-secondary hover:text-verdict-malicious hover:bg-verdict-malicious/10 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <TrashIcon />
+            <span className="hidden sm:inline">Clear</span>
+          </button>
+          <button
+            onClick={runReport}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-accent/15 text-accent hover:bg-accent/25 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ReportIcon />
+            <span className="hidden sm:inline">Generate report</span>
+            <span className="sm:hidden">Report</span>
+          </button>
+        </div>
       </div>
 
       {/* Chat stream */}
@@ -260,6 +306,16 @@ function ReportIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <path d="M14 2v6h6M8 13h8M8 17h8M8 9h2" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
     </svg>
   )
 }
