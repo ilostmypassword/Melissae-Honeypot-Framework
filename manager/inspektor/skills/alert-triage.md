@@ -23,6 +23,6 @@ last hour", "explain MLS009 hits").
 
 ## Output format
 
-- **Summary line:** how many alerts, over what window, how many critical.
-- **By severity / rule:** a compact table or bullets — Rule | Count | Top IP(s) | Severity.
-- **Worth attention:** 1–3 bullets on the alerts that matter and why.
+* **Summary line:** how many alerts, over what window, how many critical.
+* **By severity / rule:** a compact table (`Rule | Count | Top IP(s) | Severity`).
+* **Worth attention:** 1 to 3 bullets on the alerts that matter and why.

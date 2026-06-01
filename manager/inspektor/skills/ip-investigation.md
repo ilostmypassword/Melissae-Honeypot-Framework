@@ -24,7 +24,7 @@
 ## Output format
 
 A short analyst note:
-- **Verdict line:** `IP` — verdict (score, or *untracked*), country/ISP, first→last seen.
-- **What they did:** 3–6 bullets in chronological order, IPs/paths/users as `code`.
-- **Assessment:** 1–2 sentences on intent and how far they got.
-- **Recommended action:** 1–2 bullets, only if warranted.
+* **Verdict line:** `IP`, verdict (score, or `untracked`), country/ISP, first to last seen.
+* **What they did:** 3 to 6 bullets in chronological order, IPs/paths/users as `code`.
+* **Assessment:** 1 to 2 sentences on intent and how far they got.
+* **Recommended action:** 1 to 2 bullets, only if warranted.

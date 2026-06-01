@@ -99,7 +99,6 @@ function fontFor(doc, w) {
 
 // ----- Text sanitization --------------------------------------------------- //
 const PDF_SAFE_HIGH = new Set([
-  0x2013, 0x2014,                 // – —
   0x2018, 0x2019, 0x201c, 0x201d, // ‘ ’ “ ”
   0x2022,                         // •
   0x2026,                         // …
@@ -107,13 +106,14 @@ const PDF_SAFE_HIGH = new Set([
 
 function sanitizeText(input) {
   let s = String(input ?? '')
-    .replace(/[\u2192\u2794\u279c\u27a4\u21d2\u2799\u2799]/g, '->')
-    .replace(/[\u2190\u21d0]/g, '<-')
+    .replace(/[\u2192\u2794\u279c\u27a4\u21d2\u2799\u2799]/g, ' to ')
+    .replace(/[\u2190\u21d0]/g, ' from ')
     .replace(/[\u2713\u2714\u2705]/g, '[ok]')
     .replace(/[\u2717\u2718\u274c]/g, '[x]')
     .replace(/\u26a0/g, '!')
     .replace(/\u00a0/g, ' ')
-    .replace(/[\u200b-\u200d\ufe0e\ufe0f]/g, '') // ZWSP/ZWJ/variation selectors
+    .replace(/[\u200b-\u200d\ufe0e\ufe0f]/g, '')
+    .replace(/\s*[\u2013\u2014]\s*/g, ', ')
   let out = ''
   for (const ch of s) {
     const cp = ch.codePointAt(0)

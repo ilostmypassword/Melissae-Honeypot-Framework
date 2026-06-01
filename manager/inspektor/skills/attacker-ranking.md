@@ -23,5 +23,5 @@ attackers", "most active IPs", "who should I worry about", "show malicious IPs".
 
 A compact ranked table sorted by score descending:
 `# | IP | Country | Score | Verdict | Why it ranks (rules / actions)`.
-Keep to the number requested (default top 5–10). Add one closing sentence on the
-overall picture (e.g. concentration by country or by attack type).
+Keep to the number requested (default top 5 to 10). Add one closing sentence on
+the overall picture (e.g. concentration by country or by attack type).

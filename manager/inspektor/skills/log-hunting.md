@@ -38,7 +38,7 @@ what activity exists **beyond the tracked threats**.
 
 ## Output format
 
-- **Query line:** the field/value you searched (or "log overview").
-- **Findings:** distinct IPs, time range, agents involved — as bullets or a small table.
-- **Notable actors:** the IP(s) worth a closer look, with verdict/score, marking
+* **Query line:** the field/value you searched (or "log overview").
+* **Findings:** distinct IPs, time range, agents involved, as bullets or a small table.
+* **Notable actors:** the IP(s) worth a closer look, with verdict/score, marking
   any that are untracked.

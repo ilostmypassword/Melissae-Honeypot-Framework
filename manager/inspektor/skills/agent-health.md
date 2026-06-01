@@ -25,9 +25,9 @@ activity comes from, which honeypots are up, "is everything reporting".
 
 ## Output format
 
-- **Fleet line:** N agents, how many healthy vs degraded/offline.
-- **Per-agent table:** Agent | Host | Status | Last seen | Modules | Events seen.
+* **Fleet line:** N agents, how many healthy vs degraded/offline.
+* **Per-agent table:** `Agent | Host | Status | Last seen | Modules | Events seen`.
   Highlight unhealthy or stale rows, and any healthy agent with zero events.
-- **Coverage note:** 1–2 sentences on gaps. Distinguish "not reporting" (health
+* **Coverage note:** 1 to 2 sentences on gaps. Distinguish "not reporting" (health
   problem) from "reporting but no scored threats" (normal lag) from "healthy but
   zero events" (possible exposure gap).

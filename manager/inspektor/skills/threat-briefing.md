@@ -43,19 +43,20 @@ data"); the only allowed lead-in is the single atmospheric line.
 ```
 ## Threat Briefing
 
-**Posture:** one line — overall risk level (Calm / Elevated / Critical) and why.
+**Posture:** one line stating the overall risk level (Calm, Elevated, or
+Critical) and why. No dashes; use a colon or a full stop.
 
 ### Key Findings
-- 3–5 bullets, one sentence each, highest-impact first. Reference IPs as `code`, cite scores/verdicts and rule ids where relevant. State both tracked threats and the wider log picture (distinct sources seen, untracked activity) when they differ.
+* 3 to 5 bullets, one sentence each, highest-impact first. Use `*` markers. Wrap IPs, rule ids and verdicts in `code`. State both the tracked threats and the wider log picture (distinct sources seen, untracked activity) when they differ.
 
 ### Top Attackers
-Compact table: IP | Country | Score | What they did. Lead with scored threats; include serious untracked sources, marking their score as `untracked` rather than inventing one. Max 5 rows.
+Compact table: `IP | Country | Score | What they did`. Lead with scored threats; include serious untracked sources, marking their score as `untracked` rather than inventing one. Max 5 rows.
 
 ### Untracked / Emerging Activity
-Only when `get_log_overview` shows sources not in `threats`: a short bullet list of the notable ones (IP, protocol, agent, what they did) so coverage gaps and scoring lag are visible. Omit this section if there is none.
+Only when `get_log_overview` shows sources not in `threats`: a short `*` bullet list of the notable ones (IP, protocol, agent, what they did) so coverage gaps and scoring lag are visible. Omit this section if there is none.
 
 ### Recommended Actions
-- 2–4 short, prioritized, actionable bullets.
+1. 2 to 4 short, prioritized, actionable items as a numbered list.
 ```
 
 Quiet network: only if `get_log_overview` reports zero events. Keep the
