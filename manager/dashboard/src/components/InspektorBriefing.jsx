@@ -5,21 +5,37 @@ import { useInspektor } from '../context/InspektorContext'
 import { timeAgo } from './InspektorMarkdown'
 import { exportReportToPdf } from '../inspektorPdf'
 
+function stripInline(line) {
+  return line
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .trim()
+}
+
 function summarize(markdown, max = 220) {
   if (!markdown) return ''
   const lines = String(markdown).replace(/\r/g, '').split('\n')
+
+  // Preferred: the Posture line, with its label stripped for a clean sentence.
+  for (const raw of lines) {
+    const clean = stripInline(raw.trim())
+    const m = clean.match(/^posture\s*[:\u2014-]\s*(.+)$/i)
+    if (m && m[1].length >= 8) {
+      const s = m[1].trim()
+      return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s
+    }
+  }
+
+  // Fallback: first substantive prose line (skip headings, tables, lists).
   for (const raw of lines) {
     const line = raw.trim()
     if (!line) continue
     if (/^#{1,6}\s/.test(line)) continue          // headings
     if (/^[|>-]/.test(line) || /^\*\s/.test(line)) continue // tables / quotes / bullets
     if (/^\d+\.\s/.test(line)) continue           // ordered list
-    const clean = line
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\*(.*?)\*/g, '$1')
-      .replace(/`([^`]*)`/g, '$1')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .trim()
+    const clean = stripInline(line)
     if (clean.length < 12) continue
     return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean
   }

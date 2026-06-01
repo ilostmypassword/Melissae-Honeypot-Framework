@@ -35,7 +35,10 @@
 ## Output format
 
 GitHub-flavored Markdown, no preamble before the first `##` heading, no code
-fence around it:
+fence around it. This briefing is exported to PDF: **plain text only — no emoji,
+no country flags, no icon glyphs** (they render as garbage). Name countries in
+words. Do **not** narrate your process (no "composing the briefing", "I have the
+data"); the only allowed lead-in is the single atmospheric line.
 
 ```
 ## Threat Briefing

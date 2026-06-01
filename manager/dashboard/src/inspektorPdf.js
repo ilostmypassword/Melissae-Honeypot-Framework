@@ -97,6 +97,35 @@ function fontFor(doc, w) {
   else doc.setFont('helvetica', 'normal')
 }
 
+// ----- Text sanitization --------------------------------------------------- //
+const PDF_SAFE_HIGH = new Set([
+  0x2013, 0x2014,                 // – —
+  0x2018, 0x2019, 0x201c, 0x201d, // ‘ ’ “ ”
+  0x2022,                         // •
+  0x2026,                         // …
+])
+
+function sanitizeText(input) {
+  let s = String(input ?? '')
+    .replace(/[\u2192\u2794\u279c\u27a4\u21d2\u2799\u2799]/g, '->')
+    .replace(/[\u2190\u21d0]/g, '<-')
+    .replace(/[\u2713\u2714\u2705]/g, '[ok]')
+    .replace(/[\u2717\u2718\u274c]/g, '[x]')
+    .replace(/\u26a0/g, '!')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u200b-\u200d\ufe0e\ufe0f]/g, '') // ZWSP/ZWJ/variation selectors
+  let out = ''
+  for (const ch of s) {
+    const cp = ch.codePointAt(0)
+    if (cp === 0x09 || cp === 0x0a || cp === 0x0d) { out += ch; continue }
+    if (cp >= 0x20 && cp <= 0x7e) { out += ch; continue }   // ASCII
+    if (cp >= 0xa0 && cp <= 0xff) { out += ch; continue }   // Latin-1 supplement
+    if (PDF_SAFE_HIGH.has(cp)) { out += ch; continue }      // safe typography
+    // anything else (emoji, flags, symbols) is dropped
+  }
+  return out
+}
+
 // ----- Document builder ---------------------------------------------------- //
 export async function exportReportToPdf(markdown, meta = {}) {
   const logo = await loadLogo()
@@ -171,7 +200,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
     const fs = opts.fs ?? BODY_FS
     const lh = opts.lh ?? LINE
     const color = opts.color ?? COL.text
-    const words = wordsFromSegments(tokenizeInline(text))
+    const words = wordsFromSegments(tokenizeInline(sanitizeText(text)))
     doc.setFontSize(fs)
     let cx = x
     let lineWords = []
@@ -404,7 +433,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
 
 // Strip markdown emphasis markers for plain-text contexts (headings, tables).
 function stripBasic(text) {
-  return String(text)
+  return sanitizeText(text)
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/__(.*?)__/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
