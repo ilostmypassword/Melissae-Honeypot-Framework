@@ -23,7 +23,9 @@ function summarize(markdown, max = 220) {
     const clean = stripInline(raw.trim())
     const m = clean.match(/^posture\s*[:\u2014-]\s*(.+)$/i)
     if (m && m[1].length >= 8) {
-      const s = m[1].trim()
+      let s = m[1].trim().replace(/^(calm|elevated|critical)\b[\s.,:;\u2013\u2014-]*/i, '').trim()
+      if (s.length < 8) s = m[1].trim()
+      if (s) s = s.charAt(0).toUpperCase() + s.slice(1)
       return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s
     }
   }

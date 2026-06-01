@@ -44,7 +44,7 @@ data"); the only allowed lead-in is the single atmospheric line.
 ## Threat Briefing
 
 **Posture:** one line stating the overall risk level (Calm, Elevated, or
-Critical) and why. No dashes; use a colon or a full stop.
+Critical) and why.
 
 ### Key Findings
 * 3 to 5 bullets, one sentence each, highest-impact first. Use `*` markers. Wrap IPs, rule ids and verdicts in `code`. State both the tracked threats and the wider log picture (distinct sources seen, untracked activity) when they differ.
