@@ -30,6 +30,10 @@ def _as_json(value) -> str:
 
 @tool
 def get_global_stats() -> str:
+    """Return an overview of the current threat landscape: total tracked IPs,
+    counts per verdict (malicious/suspicious/benign), the top source countries,
+    the most common MITRE ATT&CK techniques and the most frequently matched
+    detection rules. Call this FIRST to understand the big picture."""
     if DB is None:
         return "Database unavailable."
     try:
@@ -72,6 +76,10 @@ def get_global_stats() -> str:
 
 @tool
 def list_threats(verdict: str = "", limit: int = 20) -> str:
+    """List tracked attacker IPs sorted by score (highest first). Optionally
+    filter by verdict ("malicious", "suspicious" or "benign"). Returns for each:
+    ip, score, verdict, country, isp, alert_count, mitre, first_seen, last_seen.
+    Use this to find which attackers deserve a closer look."""
     if DB is None:
         return "Database unavailable."
     query: Dict = {}
@@ -111,6 +119,10 @@ def list_threats(verdict: str = "", limit: int = 20) -> str:
 
 @tool
 def get_threat(ip: str) -> str:
+    """Return the full threat record for a single attacker IP: score, verdict,
+    geolocation, matched detection rules (id, name, severity, score, count),
+    MITRE techniques, tags, agents that saw it, and first/last seen. Use this for
+    a deep dive on a specific IP."""
     if DB is None:
         return "Database unavailable."
     try:
@@ -124,6 +136,9 @@ def get_threat(ip: str) -> str:
 
 @tool
 def get_killchain(ip: str) -> str:
+    """Return the chronological kill-chain of honeypot events observed for a
+    specific attacker IP (timestamp, protocol, action, path, user, user-agent).
+    Use this to understand exactly what an attacker did, step by step."""
     if DB is None:
         return "Database unavailable."
     try:
@@ -159,6 +174,9 @@ def get_killchain(ip: str) -> str:
 
 @tool
 def get_recent_alerts(limit: int = 30) -> str:
+    """Return the most recent detection alerts across the whole platform
+    (rule id/name, severity, score, ip, agent, MITRE, created_at). Use this to
+    see what is firing right now."""
     if DB is None:
         return "Database unavailable."
     try:
@@ -183,6 +201,10 @@ def get_recent_alerts(limit: int = 30) -> str:
 
 @tool
 def search_logs(field: str, value: str, limit: int = 25) -> str:
+    """Search raw honeypot logs by an exact field match and return matching
+    events. Allowed fields: ip, protocol, action, path, user, user-agent,
+    agent_id. Use this to investigate a specific indicator (e.g. a username, a
+    URL path or a protocol)."""
     if DB is None:
         return "Database unavailable."
     f = (field or "").strip().lower()
@@ -212,6 +234,9 @@ def search_logs(field: str, value: str, limit: int = 25) -> str:
 
 @tool
 def get_agents() -> str:
+    """Return the list of registered honeypot agents and their health status
+    (agent_id, status, last_seen, enabled modules). Use this to know where the
+    activity is coming from across the deployment."""
     if DB is None:
         return "Database unavailable."
     try:
