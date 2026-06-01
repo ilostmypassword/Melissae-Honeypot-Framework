@@ -164,6 +164,7 @@ The complete documentation is hosted on Read the Docs.
 | 📦 | [Modules](https://melissae-documentation.readthedocs.io/en/latest/modules.html) | Honeypot modules, log formats, configuration |
 | 📊 | [Dashboard](https://melissae-documentation.readthedocs.io/en/latest/dashboard.html) | Dashboard pages, search engine, threat intelligence |
 | 🎯 | [Scoring](https://melissae-documentation.readthedocs.io/en/latest/scoring.html) | Threat scoring signals, rules and verdicts |
+| 🐝 | [Inspektor](https://melissae-documentation.readthedocs.io/en/latest/inspektor.html) | AI threat analyst — setup, prompts/skills, security |
 | 🚀 | [Getting Started](https://melissae-documentation.readthedocs.io/en/latest/getting-started.html) | Installation, enrollment, configuration |
 | ⌨️ | [CLI Reference](https://melissae-documentation.readthedocs.io/en/latest/cli-reference.html) | Manager and agent commands |
 | 🤝 | [Contributing](https://melissae-documentation.readthedocs.io/en/latest/contributing.html) | Roadmap and how to contribute |
