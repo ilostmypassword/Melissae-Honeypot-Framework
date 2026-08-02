@@ -227,6 +227,9 @@ class HunterzzzIntegration:
             # Convert to Hunterzzz format
             iocs = []
             for item in results:
+                # DEBUG: Print first result
+                if len(iocs) == 0:
+                    print(f"  → DEBUG: First IP data: {item}")
                 # Determine verdict based on count (simple heuristic)
                 count = item.get('count', 0)
                 if count > 10:
@@ -242,6 +245,10 @@ class HunterzzzIntegration:
                 # Use actions as detection rules (clean up None/null)
                 actions = [a for a in item.get('actions', []) if a]
                 
+                # DEBUG: Print actions for first IoC
+                if len(iocs) == 0:
+                    print(f"  → DEBUG: Actions found: {actions}")
+                
                 ioc = {
                     'type': 'ip',
                     'value': item['_id'],
@@ -253,6 +260,11 @@ class HunterzzzIntegration:
                     'geoip': {},
                     'asn': {}
                 }
+                
+                # DEBUG: Print final IoC structure for first one
+                if len(iocs) == 0:
+                    print(f"  → DEBUG: IoC to send: {ioc}")
+                
                 iocs.append(ioc)
 
             return iocs
