@@ -200,70 +200,49 @@ class HunterzzzIntegration:
             # Calculate time threshold
             since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
 
-            # Aggregate unique IPs with their protocols and actions
-            pipeline = [
-                {
-                    '$match': {
-                        'timestamp': {'$gte': since.isoformat()},
-                        'ip': {'$exists': True}
-                    }
-                },
-                {
-                    '$group': {
-                        '_id': '$ip',
-                        'protocols': {'$addToSet': '$protocol'},
-                        'actions': {'$addToSet': '$action'},  # Use actions as detection indicators
-                        'first_seen': {'$min': '$timestamp'},
-                        'last_seen': {'$max': '$timestamp'},
-                        'count': {'$sum': 1}
-                    }
-                }
-            ]
-
-            results = list(db.logs.aggregate(pipeline))
+            # Get threats (IPs with matched rules)
+            threats = list(db.threats.find({
+                'last_seen': {'$gte': since.isoformat()}
+            }))
             
-            print(f"  → Found {len(results)} unique IPs in database")
+            print(f"  → Found {len(threats)} threats in database")
 
             # Convert to Hunterzzz format
             iocs = []
-            for item in results:
-                # DEBUG: Print first result
-                if len(iocs) == 0:
-                    print(f"  → DEBUG: First IP data: {item}")
-                # Determine verdict based on count (simple heuristic)
-                count = item.get('count', 0)
-                if count > 10:
-                    verdict = 'malicious'
-                    score = 85
-                elif count > 3:
-                    verdict = 'suspicious'
-                    score = 60
-                else:
-                    verdict = 'suspicious'
-                    score = 40
+            for threat in threats:
+                ip = threat.get('ip')
+                if not ip:
+                    continue
                 
-                # Use actions as detection rules (clean up None/null)
-                actions = [a for a in item.get('actions', []) if a]
+                # Get verdict and score from Melissae
+                verdict = threat.get('verdict', 'suspicious')
+                score = threat.get('protocol-score', 50)
                 
-                # DEBUG: Print actions for first IoC
-                if len(iocs) == 0:
-                    print(f"  → DEBUG: Actions found: {actions}")
+                # Extract rule names with IDs (e.g., "HTTP probing [MLS006]")
+                rules = []
+                for rule in threat.get('rules', []):
+                    rule_text = f"{rule.get('name', 'Unknown')} [{rule.get('id', 'N/A')}]"
+                    rules.append(rule_text)
+                
+                # Get protocols from reasons or default
+                protocols = []
+                for agent_id in threat.get('agents', []):
+                    # Try to find protocols from logs
+                    log = db.logs.find_one({'ip': ip, 'agent_id': agent_id})
+                    if log and log.get('protocol'):
+                        protocols.append(log['protocol'])
                 
                 ioc = {
                     'type': 'ip',
-                    'value': item['_id'],
+                    'value': ip,
                     'verdict': verdict,
-                    'score': score,
-                    'protocols': item.get('protocols', []),
-                    'tags': self._generate_tags(item),
-                    'rules': actions,  # Use actions as detection indicators
+                    'score': min(score, 100),  # Cap at 100
+                    'protocols': list(set(protocols)) if protocols else [],
+                    'tags': threat.get('tags', []),
+                    'rules': rules,  # Real Melissae rules (MLSXXX)
                     'geoip': {},
                     'asn': {}
                 }
-                
-                # DEBUG: Print final IoC structure for first one
-                if len(iocs) == 0:
-                    print(f"  → DEBUG: IoC to send: {ioc}")
                 
                 iocs.append(ioc)
 
