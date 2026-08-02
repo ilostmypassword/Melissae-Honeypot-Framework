@@ -272,7 +272,11 @@ class HunterzzzIntegration:
         """
         Save API key to secure config file
         """
-        config_dir = '/etc/melissae'
+        # Use home directory if /etc not writable
+        if os.access('/etc', os.W_OK):
+            config_dir = '/etc/melissae'
+        else:
+            config_dir = os.path.expanduser('~/.melissae')
         config_file = os.path.join(config_dir, 'hunterzzz.conf')
 
         # Create directory if it doesn't exist
@@ -295,7 +299,10 @@ class HunterzzzIntegration:
         """
         Load Hunterzzz configuration
         """
+        # Try /etc first, fallback to home
         config_file = '/etc/melissae/hunterzzz.conf'
+        if not os.path.exists(config_file):
+            config_file = os.path.expanduser('~/.melissae/hunterzzz.conf')
 
         if not os.path.exists(config_file):
             return None
