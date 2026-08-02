@@ -1148,7 +1148,13 @@ $cmd"
 cmd_hunterzzz() {
     local action="${1:-}"
     local HUNTERZZZ_SCRIPT="$WORKING_DIRECTORY/scripts/hunterzzz_integration.py"
-    local HUNTERZZZ_CONF="/etc/melissae/hunterzzz.conf"
+    
+    # Check both possible config locations
+    if [ -f "/etc/melissae/hunterzzz.conf" ] && [ -r "/etc/melissae/hunterzzz.conf" ]; then
+        local HUNTERZZZ_CONF="/etc/melissae/hunterzzz.conf"
+    else
+        local HUNTERZZZ_CONF="$HOME/.melissae/hunterzzz.conf"
+    fi
     
     if [ ! -f "$HUNTERZZZ_SCRIPT" ]; then
         error "Hunterzzz integration script not found at: $HUNTERZZZ_SCRIPT"
