@@ -200,7 +200,7 @@ class HunterzzzIntegration:
             # Calculate time threshold
             since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
 
-            # Aggregate unique IPs with their protocols
+            # Aggregate unique IPs with their protocols and rules
             pipeline = [
                 {
                     '$match': {
@@ -213,6 +213,7 @@ class HunterzzzIntegration:
                         '_id': '$ip',
                         'protocols': {'$addToSet': '$protocol'},
                         'actions': {'$addToSet': '$action'},
+                        'rules': {'$addToSet': '$rule'},  # Collect matched rules
                         'first_seen': {'$min': '$timestamp'},
                         'last_seen': {'$max': '$timestamp'},
                         'count': {'$sum': 1}
@@ -239,6 +240,9 @@ class HunterzzzIntegration:
                     verdict = 'suspicious'
                     score = 40
                 
+                # Clean up rules (remove None/null)
+                rules = [r for r in item.get('rules', []) if r]
+                
                 ioc = {
                     'type': 'ip',
                     'value': item['_id'],
@@ -246,6 +250,7 @@ class HunterzzzIntegration:
                     'score': score,
                     'protocols': item.get('protocols', []),
                     'tags': self._generate_tags(item),
+                    'rules': rules,  # Add matched Melissae rules
                     'geoip': {},
                     'asn': {}
                 }
