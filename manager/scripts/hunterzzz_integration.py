@@ -200,22 +200,19 @@ class HunterzzzIntegration:
             # Calculate time threshold
             since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
 
-            # Aggregate unique IPs with their verdicts
+            # Aggregate unique IPs with their protocols
             pipeline = [
                 {
                     '$match': {
                         'timestamp': {'$gte': since.isoformat()},
-                        'src_ip': {'$exists': True}
+                        'ip': {'$exists': True}
                     }
                 },
                 {
                     '$group': {
-                        '_id': '$src_ip',
+                        '_id': '$ip',
                         'protocols': {'$addToSet': '$protocol'},
-                        'verdict': {'$first': '$verdict'},
-                        'score': {'$first': '$score'},
-                        'country': {'$first': '$geoip.country'},
-                        'asn': {'$first': '$geoip.asn'},
+                        'actions': {'$addToSet': '$action'},
                         'first_seen': {'$min': '$timestamp'},
                         'last_seen': {'$max': '$timestamp'},
                         'count': {'$sum': 1}
@@ -224,23 +221,33 @@ class HunterzzzIntegration:
             ]
 
             results = list(db.logs.aggregate(pipeline))
+            
+            print(f"  → Found {len(results)} unique IPs in database")
 
             # Convert to Hunterzzz format
             iocs = []
             for item in results:
+                # Determine verdict based on count (simple heuristic)
+                count = item.get('count', 0)
+                if count > 10:
+                    verdict = 'malicious'
+                    score = 85
+                elif count > 3:
+                    verdict = 'suspicious'
+                    score = 60
+                else:
+                    verdict = 'suspicious'
+                    score = 40
+                
                 ioc = {
                     'type': 'ip',
                     'value': item['_id'],
-                    'verdict': item.get('verdict', 'suspicious'),
-                    'score': item.get('score', 50),
+                    'verdict': verdict,
+                    'score': score,
                     'protocols': item.get('protocols', []),
                     'tags': self._generate_tags(item),
-                    'geoip': {
-                        'country': item.get('country')
-                    },
-                    'asn': {
-                        'number': item.get('asn')
-                    }
+                    'geoip': {},
+                    'asn': {}
                 }
                 iocs.append(ioc)
 
