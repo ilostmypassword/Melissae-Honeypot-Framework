@@ -277,6 +277,12 @@ cmd_help() {
     echo -e "  ${CYAN}inspektor${RESET}                    Enable/disable or reconfigure the AI threat analyst"
     echo -e "  ${CYAN}destroy${RESET}                      Stop and remove all containers"
     echo
+    echo -e "${BOLD}${WHITE}HUNTERZZZ INTEGRATION${RESET}"
+    echo -e "  ${CYAN}hunterzzz enroll${RESET}             Enroll this manager with Hunterzzz platform"
+    echo -e "  ${CYAN}hunterzzz sync${RESET}               Manually sync IoCs to Hunterzzz"
+    echo -e "  ${CYAN}hunterzzz status${RESET}             Show Hunterzzz enrollment status"
+    echo -e "  ${CYAN}hunterzzz test${RESET}               Test Hunterzzz connection"
+    echo
     echo -e "${BOLD}${WHITE}SHELL${RESET}"
     echo -e "  ${CYAN}clear${RESET}                        Clear screen"
     echo -e "  ${CYAN}banner${RESET}                       Show banner"
@@ -1138,6 +1144,204 @@ $cmd"
     echo
 }
 
+# Hunterzzz integration command
+cmd_hunterzzz() {
+    local action="${1:-}"
+    local HUNTERZZZ_SCRIPT="$WORKING_DIRECTORY/scripts/hunterzzz_integration.py"
+    local HUNTERZZZ_CONF="/etc/melissae/hunterzzz.conf"
+    
+    if [ ! -f "$HUNTERZZZ_SCRIPT" ]; then
+        error "Hunterzzz integration script not found at: $HUNTERZZZ_SCRIPT"
+        return 1
+    fi
+    
+    case "$action" in
+        enroll)
+            echo
+            info "Hunterzzz Manager Enrollment"
+            echo
+            
+            # Prompt for Hunterzzz URL
+            local hunterzzz_url
+            read -p "$(echo -e "${CYAN}Hunterzzz URL${RESET} (e.g., https://hunterzzz.example.com): ")" hunterzzz_url
+            if [ -z "$hunterzzz_url" ]; then
+                error "URL is required"
+                return 1
+            fi
+            
+            # Prompt for manager URL
+            local manager_url
+            read -p "$(echo -e "${CYAN}This manager's URL${RESET} (e.g., https://$(hostname):8443): ")" manager_url
+            if [ -z "$manager_url" ]; then
+                error "Manager URL is required"
+                return 1
+            fi
+            
+            echo
+            echo -e "${YELLOW}Please get enrollment token from Hunterzzz dashboard:${RESET}"
+            echo -e "  1. Login to ${hunterzzz_url}"
+            echo -e "  2. Go to Dashboard → Enroll Manager"
+            echo -e "  3. Enter manager URL: ${manager_url}"
+            echo -e "  4. Copy the enrollment token and challenge"
+            echo
+            
+            # Prompt for token
+            local token
+            read -p "$(echo -e "${CYAN}Enrollment Token${RESET}: ")" token
+            if [ -z "$token" ]; then
+                error "Token is required"
+                return 1
+            fi
+            
+            # Prompt for challenge
+            local challenge
+            read -p "$(echo -e "${CYAN}Challenge${RESET}: ")" challenge
+            if [ -z "$challenge" ]; then
+                error "Challenge is required"
+                return 1
+            fi
+            
+            echo
+            info "Enrolling with Hunterzzz..."
+            
+            # Run enrollment
+            if python3 "$HUNTERZZZ_SCRIPT" enroll \
+                --hunterzzz-url "$hunterzzz_url" \
+                --token "$token" \
+                --challenge "$challenge" \
+                --manager-url "$manager_url" \
+                --manager-name "$(hostname)"; then
+                
+                echo
+                success "Enrollment complete!"
+                echo
+                
+                # Ask if user wants to setup automatic sync
+                read -p "$(echo -e "${CYAN}Setup automatic IoC sync (every 5 min)?${RESET} [Y/n]: ")" setup_sync
+                if [[ "$setup_sync" =~ ^[Yy]?$ ]]; then
+                    _setup_hunterzzz_sync "$hunterzzz_url"
+                fi
+            else
+                error "Enrollment failed"
+                return 1
+            fi
+            ;;
+            
+        sync)
+            if [ ! -f "$HUNTERZZZ_CONF" ]; then
+                error "Not enrolled with Hunterzzz. Run: hunterzzz enroll"
+                return 1
+            fi
+            
+            local since_hours="${2:-1}"
+            info "Syncing IoCs from last $since_hours hour(s)..."
+            python3 "$HUNTERZZZ_SCRIPT" sync --since-hours "$since_hours"
+            ;;
+            
+        status)
+            echo
+            if [ -f "$HUNTERZZZ_CONF" ]; then
+                success "Enrolled with Hunterzzz"
+                echo
+                echo -e "${DIM}Configuration: $HUNTERZZZ_CONF${RESET}"
+                
+                if command -v systemctl >/dev/null 2>&1; then
+                    if systemctl is-active --quiet hunterzzz_sync.timer 2>/dev/null; then
+                        success "Auto-sync: ACTIVE (every 5 min)"
+                        echo
+                        systemctl status hunterzzz_sync.timer --no-pager | head -n 5
+                    else
+                        warn "Auto-sync: NOT CONFIGURED"
+                        echo -e "${DIM}  Run: hunterzzz enroll${RESET}"
+                    fi
+                fi
+            else
+                warn "Not enrolled with Hunterzzz"
+                echo
+                echo -e "${DIM}  Run: hunterzzz enroll${RESET}"
+            fi
+            echo
+            ;;
+            
+        test)
+            if [ ! -f "$HUNTERZZZ_CONF" ]; then
+                error "Not enrolled with Hunterzzz. Run: hunterzzz enroll"
+                return 1
+            fi
+            
+            info "Testing Hunterzzz connection..."
+            python3 "$HUNTERZZZ_SCRIPT" test
+            ;;
+            
+        *)
+            error "Unknown action: $action"
+            echo
+            echo -e "${DIM}Available actions:${RESET}"
+            echo -e "  ${CYAN}hunterzzz enroll${RESET}   - Enroll this manager"
+            echo -e "  ${CYAN}hunterzzz sync${RESET}     - Manually sync IoCs"
+            echo -e "  ${CYAN}hunterzzz status${RESET}   - Show enrollment status"
+            echo -e "  ${CYAN}hunterzzz test${RESET}     - Test connection"
+            return 1
+            ;;
+    esac
+}
+
+# Setup Hunterzzz automatic sync
+_setup_hunterzzz_sync() {
+    local hunterzzz_url="$1"
+    
+    info "Setting up automatic sync..."
+    
+    # Create systemd service
+    local service_file="/etc/systemd/system/hunterzzz_sync.service"
+    local timer_file="/etc/systemd/system/hunterzzz_sync.timer"
+    
+    sudo tee "$service_file" > /dev/null <<EOF
+[Unit]
+Description=Melissae to Hunterzzz IoC Sync Service
+After=network.target mongodb.service
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$WORKING_DIRECTORY
+ExecStart=/usr/bin/python3 $WORKING_DIRECTORY/scripts/hunterzzz_integration.py sync --since-hours 1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo tee "$timer_file" > /dev/null <<EOF
+[Unit]
+Description=Melissae to Hunterzzz IoC Sync Timer
+Requires=hunterzzz_sync.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    # Reload systemd and enable timer
+    sudo systemctl daemon-reload
+    sudo systemctl enable hunterzzz_sync.timer
+    sudo systemctl start hunterzzz_sync.timer
+    
+    success "Automatic sync configured"
+    echo -e "${DIM}  Service: hunterzzz_sync.service${RESET}"
+    echo -e "${DIM}  Timer: hunterzzz_sync.timer${RESET}"
+    echo -e "${DIM}  Interval: every 5 minutes${RESET}"
+    echo
+    echo -e "${CYAN}Useful commands:${RESET}"
+    echo -e "  ${WHITE}systemctl status hunterzzz_sync.timer${RESET}  - Check timer status"
+    echo -e "  ${WHITE}journalctl -u hunterzzz_sync.service -f${RESET} - Follow sync logs"
+}
+
 # Main interactive CLI loop with command dispatch
 main_loop() {
     print_banner
@@ -1183,6 +1387,7 @@ main_loop() {
             events)         cmd_events "${params[@]}" ;;
             install)        cmd_install ;;
             inspektor)      cmd_inspektor ;;
+            hunterzzz)      cmd_hunterzzz "${params[@]}" ;;
             destroy)        cmd_destroy ;;
             clear|cls)      clear ;;
             banner)         print_banner ;;
