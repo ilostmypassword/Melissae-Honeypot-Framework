@@ -232,6 +232,29 @@ class HunterzzzIntegration:
                     if log and log.get('protocol'):
                         protocols.append(log['protocol'])
                 
+                # Extract GeoIP and ASN data from Melissae threat
+                geo = threat.get('geo', {})
+                geoip_data = {}
+                asn_data = {}
+                
+                if geo:
+                    # Map Melissae geo fields to Hunterzzz format
+                    if geo.get('country'):
+                        geoip_data['country'] = geo['country']
+                    if geo.get('country_code'):
+                        geoip_data['country_code'] = geo['country_code']
+                    if geo.get('city'):
+                        geoip_data['city'] = geo['city']
+                    if geo.get('lat') is not None and geo.get('lon') is not None:
+                        geoip_data['latitude'] = geo['lat']
+                        geoip_data['longitude'] = geo['lon']
+                    
+                    # ASN information from ISP/Org
+                    if geo.get('isp'):
+                        asn_data['isp'] = geo['isp']
+                    if geo.get('org'):
+                        asn_data['org'] = geo['org']
+                
                 ioc = {
                     'type': 'ip',
                     'value': ip,
@@ -240,8 +263,8 @@ class HunterzzzIntegration:
                     'protocols': list(set(protocols)) if protocols else [],
                     'tags': threat.get('tags', []),
                     'rules': rules,  # Real Melissae rules (MLSXXX)
-                    'geoip': {},
-                    'asn': {}
+                    'geoip': geoip_data,
+                    'asn': asn_data
                 }
                 
                 iocs.append(ioc)
