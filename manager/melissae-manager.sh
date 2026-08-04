@@ -277,11 +277,11 @@ cmd_help() {
     echo -e "  ${CYAN}inspektor${RESET}                    Enable/disable or reconfigure the AI threat analyst"
     echo -e "  ${CYAN}destroy${RESET}                      Stop and remove all containers"
     echo
-    echo -e "${BOLD}${WHITE}HUNTERZZZ INTEGRATION${RESET}"
-    echo -e "  ${CYAN}hunterzzz enroll${RESET}             Enroll this manager with Hunterzzz platform"
-    echo -e "  ${CYAN}hunterzzz sync${RESET}               Manually sync IoCs to Hunterzzz"
-    echo -e "  ${CYAN}hunterzzz status${RESET}             Show Hunterzzz enrollment status"
-    echo -e "  ${CYAN}hunterzzz test${RESET}               Test Hunterzzz connection"
+    echo -e "${BOLD}${WHITE}DECOYDEX INTEGRATION${RESET}"
+    echo -e "  ${CYAN}decoydex enroll${RESET}             Enroll this manager with DecoyDex platform"
+    echo -e "  ${CYAN}decoydex sync${RESET}               Manually sync IoCs to DecoyDex"
+    echo -e "  ${CYAN}decoydex status${RESET}             Show DecoyDex enrollment status"
+    echo -e "  ${CYAN}decoydex test${RESET}               Test DecoyDex connection"
     echo
     echo -e "${BOLD}${WHITE}SHELL${RESET}"
     echo -e "  ${CYAN}clear${RESET}                        Clear screen"
@@ -1144,33 +1144,33 @@ $cmd"
     echo
 }
 
-# Hunterzzz integration command
-cmd_hunterzzz() {
+# DecoyDex integration command
+cmd_decoydex() {
     local action="${1:-}"
-    local HUNTERZZZ_SCRIPT="$WORKING_DIRECTORY/scripts/hunterzzz_integration.py"
+    local DECOYDEX_SCRIPT="$WORKING_DIRECTORY/scripts/decoydex_integration.py"
     
     # Check both possible config locations
-    if [ -f "/etc/melissae/hunterzzz.conf" ] && [ -r "/etc/melissae/hunterzzz.conf" ]; then
-        local HUNTERZZZ_CONF="/etc/melissae/hunterzzz.conf"
+    if [ -f "/etc/melissae/decoydex.conf" ] && [ -r "/etc/melissae/decoydex.conf" ]; then
+        local DECOYDEX_CONF="/etc/melissae/decoydex.conf"
     else
-        local HUNTERZZZ_CONF="$HOME/.melissae/hunterzzz.conf"
+        local DECOYDEX_CONF="$HOME/.melissae/decoydex.conf"
     fi
     
-    if [ ! -f "$HUNTERZZZ_SCRIPT" ]; then
-        error "Hunterzzz integration script not found at: $HUNTERZZZ_SCRIPT"
+    if [ ! -f "$DECOYDEX_SCRIPT" ]; then
+        error "DecoyDex integration script not found at: $DECOYDEX_SCRIPT"
         return 1
     fi
     
     case "$action" in
         enroll)
             echo
-            info "Hunterzzz Manager Enrollment"
+            info "DecoyDex Manager Enrollment"
             echo
             
-            # Prompt for Hunterzzz URL
-            local hunterzzz_url
-            read -p "$(echo -e "${CYAN}Hunterzzz URL${RESET} (e.g., https://hunterzzz.example.com): ")" hunterzzz_url
-            if [ -z "$hunterzzz_url" ]; then
+            # Prompt for DecoyDex URL
+            local decoydex_url
+            read -p "$(echo -e "${CYAN}DecoyDex URL${RESET} (e.g., https://decoydex.example.com): ")" decoydex_url
+            if [ -z "$decoydex_url" ]; then
                 error "URL is required"
                 return 1
             fi
@@ -1184,8 +1184,8 @@ cmd_hunterzzz() {
             fi
             
             echo
-            echo -e "${YELLOW}Please get enrollment token from Hunterzzz dashboard:${RESET}"
-            echo -e "  1. Login to ${hunterzzz_url}"
+            echo -e "${YELLOW}Please get enrollment token from DecoyDex dashboard:${RESET}"
+            echo -e "  1. Login to ${decoydex_url}"
             echo -e "  2. Go to Dashboard → Enroll Manager"
             echo -e "  3. Enter manager URL: ${manager_url}"
             echo -e "  4. Copy the enrollment token and challenge"
@@ -1208,11 +1208,11 @@ cmd_hunterzzz() {
             fi
             
             echo
-            info "Enrolling with Hunterzzz..."
+            info "Enrolling with DecoyDex..."
             
             # Run enrollment
-            if python3 "$HUNTERZZZ_SCRIPT" enroll \
-                --hunterzzz-url "$hunterzzz_url" \
+            if python3 "$DECOYDEX_SCRIPT" enroll \
+                --decoydex-url "$decoydex_url" \
                 --token "$token" \
                 --challenge "$challenge" \
                 --manager-url "$manager_url" \
@@ -1225,7 +1225,7 @@ cmd_hunterzzz() {
                 # Ask if user wants to setup automatic sync
                 read -p "$(echo -e "${CYAN}Setup automatic IoC sync (every 5 min)?${RESET} [Y/n]: ")" setup_sync
                 if [[ "$setup_sync" =~ ^[Yy]?$ ]]; then
-                    _setup_hunterzzz_sync "$hunterzzz_url"
+                    _setup_decoydex_sync "$decoydex_url"
                 fi
             else
                 error "Enrollment failed"
@@ -1234,84 +1234,84 @@ cmd_hunterzzz() {
             ;;
             
         sync)
-            if [ ! -f "$HUNTERZZZ_CONF" ]; then
-                error "Not enrolled with Hunterzzz. Run: hunterzzz enroll"
+            if [ ! -f "$DECOYDEX_CONF" ]; then
+                error "Not enrolled with DecoyDex. Run: decoydex enroll"
                 return 1
             fi
             
             local since_hours="${2:-1}"
             info "Syncing IoCs from last $since_hours hour(s)..."
-            python3 "$HUNTERZZZ_SCRIPT" sync --since-hours "$since_hours"
+            python3 "$DECOYDEX_SCRIPT" sync --since-hours "$since_hours"
             ;;
             
         status)
             echo
-            if [ -f "$HUNTERZZZ_CONF" ]; then
-                success "Enrolled with Hunterzzz"
+            if [ -f "$DECOYDEX_CONF" ]; then
+                success "Enrolled with DecoyDex"
                 echo
-                echo -e "${DIM}Configuration: $HUNTERZZZ_CONF${RESET}"
+                echo -e "${DIM}Configuration: $DECOYDEX_CONF${RESET}"
                 
                 if command -v systemctl >/dev/null 2>&1; then
-                    if systemctl is-active --quiet hunterzzz_sync.timer 2>/dev/null; then
+                    if systemctl is-active --quiet decoydex_sync.timer 2>/dev/null; then
                         success "Auto-sync: ACTIVE (every 5 min)"
                         echo
-                        systemctl status hunterzzz_sync.timer --no-pager | head -n 5
+                        systemctl status decoydex_sync.timer --no-pager | head -n 5
                     else
                         warn "Auto-sync: NOT CONFIGURED"
-                        echo -e "${DIM}  Run: hunterzzz enroll${RESET}"
+                        echo -e "${DIM}  Run: decoydex enroll${RESET}"
                     fi
                 fi
             else
-                warn "Not enrolled with Hunterzzz"
+                warn "Not enrolled with DecoyDex"
                 echo
-                echo -e "${DIM}  Run: hunterzzz enroll${RESET}"
+                echo -e "${DIM}  Run: decoydex enroll${RESET}"
             fi
             echo
             ;;
             
         test)
-            if [ ! -f "$HUNTERZZZ_CONF" ]; then
-                error "Not enrolled with Hunterzzz. Run: hunterzzz enroll"
+            if [ ! -f "$DECOYDEX_CONF" ]; then
+                error "Not enrolled with DecoyDex. Run: decoydex enroll"
                 return 1
             fi
             
-            info "Testing Hunterzzz connection..."
-            python3 "$HUNTERZZZ_SCRIPT" test
+            info "Testing DecoyDex connection..."
+            python3 "$DECOYDEX_SCRIPT" test
             ;;
             
         *)
             error "Unknown action: $action"
             echo
             echo -e "${DIM}Available actions:${RESET}"
-            echo -e "  ${CYAN}hunterzzz enroll${RESET}   - Enroll this manager"
-            echo -e "  ${CYAN}hunterzzz sync${RESET}     - Manually sync IoCs"
-            echo -e "  ${CYAN}hunterzzz status${RESET}   - Show enrollment status"
-            echo -e "  ${CYAN}hunterzzz test${RESET}     - Test connection"
+            echo -e "  ${CYAN}decoydex enroll${RESET}   - Enroll this manager"
+            echo -e "  ${CYAN}decoydex sync${RESET}     - Manually sync IoCs"
+            echo -e "  ${CYAN}decoydex status${RESET}   - Show enrollment status"
+            echo -e "  ${CYAN}decoydex test${RESET}     - Test connection"
             return 1
             ;;
     esac
 }
 
-# Setup Hunterzzz automatic sync
-_setup_hunterzzz_sync() {
-    local hunterzzz_url="$1"
+# Setup DecoyDex automatic sync
+_setup_decoydex_sync() {
+    local decoydex_url="$1"
     
     info "Setting up automatic sync..."
     
     # Create systemd service
-    local service_file="/etc/systemd/system/hunterzzz_sync.service"
-    local timer_file="/etc/systemd/system/hunterzzz_sync.timer"
+    local service_file="/etc/systemd/system/decoydex_sync.service"
+    local timer_file="/etc/systemd/system/decoydex_sync.timer"
     
     sudo tee "$service_file" > /dev/null <<EOF
 [Unit]
-Description=Melissae to Hunterzzz IoC Sync Service
+Description=Melissae to DecoyDex IoC Sync Service
 After=network.target mongodb.service
 
 [Service]
 Type=oneshot
 User=$USER
 WorkingDirectory=$WORKING_DIRECTORY
-ExecStart=/usr/bin/python3 $WORKING_DIRECTORY/scripts/hunterzzz_integration.py sync --since-hours 1
+ExecStart=/usr/bin/python3 $WORKING_DIRECTORY/scripts/decoydex_integration.py sync --since-hours 1
 StandardOutput=journal
 StandardError=journal
 
@@ -1321,8 +1321,8 @@ EOF
 
     sudo tee "$timer_file" > /dev/null <<EOF
 [Unit]
-Description=Melissae to Hunterzzz IoC Sync Timer
-Requires=hunterzzz_sync.service
+Description=Melissae to DecoyDex IoC Sync Timer
+Requires=decoydex_sync.service
 
 [Timer]
 OnBootSec=5min
@@ -1335,17 +1335,17 @@ EOF
 
     # Reload systemd and enable timer
     sudo systemctl daemon-reload
-    sudo systemctl enable hunterzzz_sync.timer
-    sudo systemctl start hunterzzz_sync.timer
+    sudo systemctl enable decoydex_sync.timer
+    sudo systemctl start decoydex_sync.timer
     
     success "Automatic sync configured"
-    echo -e "${DIM}  Service: hunterzzz_sync.service${RESET}"
-    echo -e "${DIM}  Timer: hunterzzz_sync.timer${RESET}"
+    echo -e "${DIM}  Service: decoydex_sync.service${RESET}"
+    echo -e "${DIM}  Timer: decoydex_sync.timer${RESET}"
     echo -e "${DIM}  Interval: every 5 minutes${RESET}"
     echo
     echo -e "${CYAN}Useful commands:${RESET}"
-    echo -e "  ${WHITE}systemctl status hunterzzz_sync.timer${RESET}  - Check timer status"
-    echo -e "  ${WHITE}journalctl -u hunterzzz_sync.service -f${RESET} - Follow sync logs"
+    echo -e "  ${WHITE}systemctl status decoydex_sync.timer${RESET}  - Check timer status"
+    echo -e "  ${WHITE}journalctl -u decoydex_sync.service -f${RESET} - Follow sync logs"
 }
 
 # Main interactive CLI loop with command dispatch
@@ -1393,7 +1393,7 @@ main_loop() {
             events)         cmd_events "${params[@]}" ;;
             install)        cmd_install ;;
             inspektor)      cmd_inspektor ;;
-            hunterzzz)      cmd_hunterzzz "${params[@]}" ;;
+            decoydex)      cmd_decoydex "${params[@]}" ;;
             destroy)        cmd_destroy ;;
             clear|cls)      clear ;;
             banner)         print_banner ;;

@@ -11,13 +11,13 @@ import pymongo
 from typing import List, Dict, Optional
 
 
-class HunterzzzIntegration:
-    def __init__(self, hunterzzz_url: str, verify_ssl: bool = True):
+class DecoyDexIntegration:
+    def __init__(self, decoydex_url: str, verify_ssl: bool = True):
         # Validate URL format
-        if not hunterzzz_url.startswith(('http://', 'https://')):
-            raise ValueError("Invalid Hunterzzz URL format")
+        if not decoydex_url.startswith(('http://', 'https://')):
+            raise ValueError("Invalid DecoyDex URL format")
 
-        self.base_url = hunterzzz_url.rstrip('/')
+        self.base_url = decoydex_url.rstrip('/')
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
         self.session.headers.update({
@@ -63,7 +63,7 @@ class HunterzzzIntegration:
                 print(f"   Manager ID: {data['manager_id']}")
                 print(f"   Hunter: {data['hunter']}")
                 print(f"   Ingest Endpoint: {data['ingest_endpoint']}")
-                print(f"\n⚠️  API Key saved to: /etc/melissae/hunterzzz.conf")
+                print(f"\n⚠️  API Key saved to: /etc/melissae/decoydex.conf")
                 print(f"   Keep this file secure!")
 
                 return data
@@ -93,7 +93,7 @@ class HunterzzzIntegration:
             print(f"ℹ️  No new IoCs to sync (last {since_hours} hours)")
             return {'synced': 0}
 
-        print(f"📤 Syncing {len(iocs)} IoCs to Hunterzzz...")
+        print(f"📤 Syncing {len(iocs)} IoCs to DecoyDex...")
 
         # Send in batches
         total_synced = 0
@@ -216,7 +216,7 @@ class HunterzzzIntegration:
 
             print(f"  → Found {len(threats)} threats in database")
 
-            # Convert to Hunterzzz format
+            # Convert to DecoyDex format
             iocs = []
             for threat in threats:
                 ip = threat.get('ip')
@@ -247,7 +247,7 @@ class HunterzzzIntegration:
                 asn_data = {}
 
                 if geo:
-                    # Map Melissae geo fields to Hunterzzz format
+                    # Map Melissae geo fields to DecoyDex format
                     if geo.get('country'):
                         geoip_data['country'] = geo['country']
                     if geo.get('country_code'):
@@ -315,7 +315,7 @@ class HunterzzzIntegration:
             config_dir = '/etc/melissae'
         else:
             config_dir = os.path.expanduser('~/.melissae')
-        config_file = os.path.join(config_dir, 'hunterzzz.conf')
+        config_file = os.path.join(config_dir, 'decoydex.conf')
 
         # Create directory if it doesn't exist
         os.makedirs(config_dir, mode=0o700, exist_ok=True)
@@ -339,12 +339,12 @@ class HunterzzzIntegration:
 
     def _load_config(self) -> Optional[Dict]:
         """
-        Load Hunterzzz configuration
+        Load DecoyDex configuration
         """
         # Try /etc first, fallback to home
-        config_file = '/etc/melissae/hunterzzz.conf'
+        config_file = '/etc/melissae/decoydex.conf'
         if not os.path.exists(config_file):
-            config_file = os.path.expanduser('~/.melissae/hunterzzz.conf')
+            config_file = os.path.expanduser('~/.melissae/decoydex.conf')
 
         if not os.path.exists(config_file):
             return None
@@ -358,7 +358,7 @@ class HunterzzzIntegration:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Melissae to Hunterzzz Integration'
+        description='Melissae to DecoyDex Integration'
     )
 
     parser.add_argument(
@@ -368,9 +368,9 @@ def main():
     )
 
     parser.add_argument(
-        '--hunterzzz-url',
-        default=os.getenv('HUNTERZZZ_URL', 'https://hunterzzz.example.com'),
-        help='Hunterzzz base URL'
+        '--decoydex-url',
+        default=os.getenv('DECOYDEX_URL', 'https://decoydex.example.com'),
+        help='DecoyDex base URL'
     )
 
     parser.add_argument(
@@ -415,8 +415,8 @@ def main():
     args = parser.parse_args()
 
     # Initialize integration
-    integration = HunterzzzIntegration(
-        args.hunterzzz_url,
+    integration = DecoyDexIntegration(
+        args.decoydex_url,
         verify_ssl=not args.no_verify_ssl
     )
 
