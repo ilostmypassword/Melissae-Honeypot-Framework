@@ -16,7 +16,7 @@ class HunterzzzIntegration:
         # Validate URL format
         if not hunterzzz_url.startswith(('http://', 'https://')):
             raise ValueError("Invalid Hunterzzz URL format")
-        
+
         self.base_url = hunterzzz_url.rstrip('/')
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
@@ -24,7 +24,7 @@ class HunterzzzIntegration:
             'User-Agent': 'Melissae-Manager/2.6',
             'Content-Type': 'application/json'
         })
-        
+
         # Set timeouts for all requests
         self.session.request = lambda *args, **kwargs: requests.Session.request(
             self.session, *args, timeout=kwargs.pop('timeout', 30), **kwargs
@@ -213,7 +213,7 @@ class HunterzzzIntegration:
             threats = list(db.threats.find({
                 'last_seen': {'$gte': since.isoformat()}
             }))
-            
+
             print(f"  → Found {len(threats)} threats in database")
 
             # Convert to Hunterzzz format
@@ -222,17 +222,17 @@ class HunterzzzIntegration:
                 ip = threat.get('ip')
                 if not ip:
                     continue
-                
+
                 # Get verdict and score from Melissae
                 verdict = threat.get('verdict', 'suspicious')
                 score = threat.get('protocol-score', 50)
-                
+
                 # Extract rule names with IDs (e.g., "HTTP probing [MLS006]")
                 rules = []
                 for rule in threat.get('rules', []):
                     rule_text = f"{rule.get('name', 'Unknown')} [{rule.get('id', 'N/A')}]"
                     rules.append(rule_text)
-                
+
                 # Get protocols from reasons or default
                 protocols = []
                 for agent_id in threat.get('agents', []):
@@ -240,12 +240,12 @@ class HunterzzzIntegration:
                     log = db.logs.find_one({'ip': ip, 'agent_id': agent_id})
                     if log and log.get('protocol'):
                         protocols.append(log['protocol'])
-                
+
                 # Extract GeoIP and ASN data from Melissae threat
                 geo = threat.get('geo', {})
                 geoip_data = {}
                 asn_data = {}
-                
+
                 if geo:
                     # Map Melissae geo fields to Hunterzzz format
                     if geo.get('country'):
@@ -257,13 +257,13 @@ class HunterzzzIntegration:
                     if geo.get('lat') is not None and geo.get('lon') is not None:
                         geoip_data['latitude'] = geo['lat']
                         geoip_data['longitude'] = geo['lon']
-                    
+
                     # ASN information from ISP/Org
                     if geo.get('isp'):
                         asn_data['isp'] = geo['isp']
                     if geo.get('org'):
                         asn_data['org'] = geo['org']
-                
+
                 ioc = {
                     'type': 'ip',
                     'value': ip,
@@ -275,7 +275,7 @@ class HunterzzzIntegration:
                     'geoip': geoip_data,
                     'asn': asn_data
                 }
-                
+
                 iocs.append(ioc)
 
             return iocs
@@ -303,16 +303,13 @@ class HunterzzzIntegration:
         return tags
 
     def _save_api_key(self, api_key: str, ingest_endpoint: str):
-        """
-        Save API key to secure config file with proper permissions
-        """
         # Validate inputs
         if not api_key or len(api_key) < 32:
             raise ValueError("Invalid API key")
-        
+
         if not ingest_endpoint.startswith(('http://', 'https://')):
             raise ValueError("Invalid ingest endpoint")
-        
+
         # Use home directory if /etc not writable
         if os.access('/etc', os.W_OK):
             config_dir = '/etc/melissae'
@@ -333,10 +330,10 @@ class HunterzzzIntegration:
         temp_file = config_file + '.tmp'
         with open(temp_file, 'w') as f:
             json.dump(config, f, indent=2)
-        
+
         # Set file permissions before moving
         os.chmod(temp_file, 0o600)
-        
+
         # Atomic rename
         os.rename(temp_file, config_file)
 
