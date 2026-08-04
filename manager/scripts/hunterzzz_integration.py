@@ -21,7 +21,7 @@ class HunterzzzIntegration:
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Melissae-Manager/2.6',
+            'User-Agent': 'Melissae-Manager/2.7',
             'Content-Type': 'application/json'
         })
 
@@ -188,7 +188,7 @@ class HunterzzzIntegration:
 
             return {
                 'name': manager_name or os.getenv('HOSTNAME', 'melissae-manager'),
-                'version': '2.6',
+                'version': '2.7',
                 'agent_count': agent_count,
                 'total_logs': log_count,
                 'protocols': protocols[:10]  # Limit to 10
@@ -197,7 +197,7 @@ class HunterzzzIntegration:
             # Fallback if MongoDB not accessible
             return {
                 'name': manager_name or 'melissae-manager',
-                'version': '2.6'
+                'version': '2.7'
             }
 
     def _fetch_iocs_from_db(self, since_hours: int) -> List[Dict]:

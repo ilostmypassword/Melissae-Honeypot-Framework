@@ -2,7 +2,7 @@
 name: Documentation Issue
 about: When something is wrong or is missing in the documentation
 title: "[DOC]"
-labels: documentation, v2.6
+labels: documentation, v2.7
 assignees: ''
 
 ---
