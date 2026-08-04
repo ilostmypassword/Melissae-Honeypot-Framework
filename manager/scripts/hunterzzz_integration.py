@@ -13,6 +13,10 @@ from typing import List, Dict, Optional
 
 class HunterzzzIntegration:
     def __init__(self, hunterzzz_url: str, verify_ssl: bool = True):
+        # Validate URL format
+        if not hunterzzz_url.startswith(('http://', 'https://')):
+            raise ValueError("Invalid Hunterzzz URL format")
+        
         self.base_url = hunterzzz_url.rstrip('/')
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
@@ -20,6 +24,11 @@ class HunterzzzIntegration:
             'User-Agent': 'Melissae-Manager/2.6',
             'Content-Type': 'application/json'
         })
+        
+        # Set timeouts for all requests
+        self.session.request = lambda *args, **kwargs: requests.Session.request(
+            self.session, *args, timeout=kwargs.pop('timeout', 30), **kwargs
+        )
 
     def enroll(self, token: str, challenge: str, manager_url: str,
                manager_name: Optional[str] = None) -> Dict:
@@ -295,8 +304,15 @@ class HunterzzzIntegration:
 
     def _save_api_key(self, api_key: str, ingest_endpoint: str):
         """
-        Save API key to secure config file
+        Save API key to secure config file with proper permissions
         """
+        # Validate inputs
+        if not api_key or len(api_key) < 32:
+            raise ValueError("Invalid API key")
+        
+        if not ingest_endpoint.startswith(('http://', 'https://')):
+            raise ValueError("Invalid ingest endpoint")
+        
         # Use home directory if /etc not writable
         if os.access('/etc', os.W_OK):
             config_dir = '/etc/melissae'
@@ -313,12 +329,16 @@ class HunterzzzIntegration:
             'enrolled_at': datetime.now(timezone.utc).isoformat()
         }
 
-        # Write with restrictive permissions
-        with open(config_file, 'w') as f:
+        # Write with restrictive permissions (atomic write)
+        temp_file = config_file + '.tmp'
+        with open(temp_file, 'w') as f:
             json.dump(config, f, indent=2)
-
-        # Set file permissions to 600 (owner read/write only)
-        os.chmod(config_file, 0o600)
+        
+        # Set file permissions before moving
+        os.chmod(temp_file, 0o600)
+        
+        # Atomic rename
+        os.rename(temp_file, config_file)
 
     def _load_config(self) -> Optional[Dict]:
         """
