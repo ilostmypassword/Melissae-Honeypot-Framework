@@ -29,7 +29,7 @@ export function parseTimestampValue(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-// Resolve the best timestamp available on a log-like object
+
 export function parseLogTimestamp(log) {
   if (!log) return null
   return parseTimestampValue(log.timestamp)
@@ -111,7 +111,7 @@ export function filterByDateRange(logs, dateRange) {
   })
 }
 
-// Compute aggregate statistics from a logs array
+
 export function computeStats(logs) {
   const protocols = { ssh: 0, ftp: 0, http: 0, modbus: 0, mqtt: 0, telnet: 0 }
   const uniqueIPs = new Set()

@@ -39,7 +39,6 @@ def parse_timestamp(log: dict) -> Optional[datetime]:
             return None
     return None
 
-# Get the most recent log timestamp for an IP
 def get_last_seen(db, ip: str) -> Optional[datetime]:
     try:
         doc = db["logs"].find_one(

@@ -29,17 +29,14 @@ warn()    { echo -e "${YELLOW}[!]${RESET} $1"; }
 error()   { echo -e "${RED}[✗]${RESET} $1"; }
 debug()   { echo -e "${GRAY}[~]${RESET} $1"; }
 
-# Validate name contains only safe characters
 _validate_name() {
     [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]]
 }
 
-# Validate input is a positive integer
 _validate_int() {
     [[ "$1" =~ ^[0-9]+$ ]]
 }
 
-# Display the ASCII art banner
 print_banner() {
     clear
     echo -e "${MAGENTA}"
@@ -62,7 +59,6 @@ EOF
     echo
 }
 
-# Detect and set the docker compose command
 ensure_compose_cmd() {
     if [ ${#compose_cmd[@]} -gt 0 ]; then return 0; fi
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -75,7 +71,6 @@ ensure_compose_cmd() {
     fi
 }
 
-# Count running manager containers
 get_running_count() {
     ensure_compose_cmd 2>/dev/null || { echo "0"; return; }
     local count
@@ -83,7 +78,6 @@ get_running_count() {
     echo "${count:-0}" | tr -d '[:space:]'
 }
 
-# Build the interactive shell prompt
 get_prompt() {
     local running_count
     running_count=$(get_running_count 2>/dev/null || echo "?")
@@ -103,20 +97,27 @@ _init_ca() {
     info "Initializing Certificate Authority..."
     mkdir -p "$PKI_DIR" "$CERTS_DIR"
 
-    openssl ecparam -genkey -name secp384r1 -out "$PKI_DIR/ca.key" 2>/dev/null
+    (umask 077; openssl ecparam -genkey -name secp384r1 -out "$PKI_DIR/ca.key" 2>/dev/null) || {
+        error "Failed to generate CA key"
+        return 1
+    }
     chmod 600 "$PKI_DIR/ca.key"
 
     local ca_subj="/CN=${ca_cn}"
     [ -n "$ca_org" ] && ca_subj="${ca_subj}/O=${ca_org}"
 
-    openssl req -new -x509 -sha384 \
+    if ! openssl req -new -x509 -sha384 \
         -key "$PKI_DIR/ca.key" \
         -out "$PKI_DIR/ca.crt" \
         -days 3650 \
         -subj "$ca_subj" \
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
-        2>/dev/null
+        2>/dev/null; then
+        error "Failed to generate CA certificate"
+        rm -f "$PKI_DIR/ca.key" "$PKI_DIR/ca.crt"
+        return 1
+    fi
 
     echo "01" > "$PKI_DIR/serial"
     touch "$PKI_DIR/index.txt"
@@ -151,8 +152,6 @@ SSLEOF
     success "CA initialized: $PKI_DIR/ca.crt"
 }
 
-# Generate a signed certificate with SAN (domain or IP)
-
 _gen_cert() {
     local name="$1"
     local cert_type="${2:-dual}"  # server, client, dual
@@ -164,7 +163,10 @@ _gen_cert() {
     local cert_dir="$CERTS_DIR/$name"
     mkdir -p "$cert_dir"
 
-    openssl ecparam -genkey -name secp384r1 -out "$cert_dir/$name.key" 2>/dev/null
+    (umask 077; openssl ecparam -genkey -name secp384r1 -out "$cert_dir/$name.key" 2>/dev/null) || {
+        error "Failed to generate key for $name"
+        return 1
+    }
     chmod 600 "$cert_dir/$name.key"
 
     local san_str=""
@@ -205,13 +207,16 @@ subjectAltName = @alt_names
 $(echo -e "$san_str")
 EXTEOF
 
-    openssl req -new -sha384 \
+    if ! openssl req -new -sha384 \
         -key "$cert_dir/$name.key" \
         -out "$cert_dir/$name.csr" \
         -config "$ext_file" \
-        2>/dev/null
+        2>/dev/null; then
+        error "Failed to create CSR for $name"
+        return 1
+    fi
 
-    openssl x509 -req -sha384 \
+    if ! openssl x509 -req -sha384 \
         -in "$cert_dir/$name.csr" \
         -CA "$PKI_DIR/ca.crt" \
         -CAkey "$PKI_DIR/ca.key" \
@@ -220,7 +225,10 @@ EXTEOF
         -days 365 \
         -extensions v3_req \
         -extfile "$ext_file" \
-        2>/dev/null
+        2>/dev/null; then
+        error "Failed to sign certificate for $name"
+        return 1
+    fi
 
     cp "$PKI_DIR/ca.crt" "$cert_dir/ca.crt"
 
@@ -229,7 +237,6 @@ EXTEOF
     success "Certificate generated: $cert_dir/$name.crt (type: $cert_type, validity: 365 days)"
 }
 
-# Revoke and remove an agent certificate
 _revoke_cert() {
     local name="$1"
     local cert_file="$CERTS_DIR/$name/$name.crt"
@@ -244,7 +251,6 @@ _revoke_cert() {
     success "Certificate revoked: $name"
 }
 
-# Display available commands and usage
 cmd_help() {
     echo
     echo -e "${BOLD}${WHITE}CORE COMMANDS${RESET}"
@@ -277,12 +283,6 @@ cmd_help() {
     echo -e "  ${CYAN}inspektor${RESET}                    Enable/disable or reconfigure the AI threat analyst"
     echo -e "  ${CYAN}destroy${RESET}                      Stop and remove all containers"
     echo
-    echo -e "${BOLD}${WHITE}DECOYDEX INTEGRATION${RESET}"
-    echo -e "  ${CYAN}decoydex enroll${RESET}             Enroll this manager with DecoyDex platform"
-    echo -e "  ${CYAN}decoydex sync${RESET}               Manually sync IoCs to DecoyDex"
-    echo -e "  ${CYAN}decoydex status${RESET}             Show DecoyDex enrollment status"
-    echo -e "  ${CYAN}decoydex test${RESET}               Test DecoyDex connection"
-    echo
     echo -e "${BOLD}${WHITE}SHELL${RESET}"
     echo -e "  ${CYAN}clear${RESET}                        Clear screen"
     echo -e "  ${CYAN}banner${RESET}                       Show banner"
@@ -291,7 +291,6 @@ cmd_help() {
     echo
 }
 
-# Show manager services and PKI status
 cmd_status() {
     if ! ensure_compose_cmd; then return 1; fi
     echo
@@ -318,7 +317,6 @@ cmd_status() {
     echo
 }
 
-# Start the manager docker stack
 cmd_start() {
     if ! ensure_compose_cmd; then return 1; fi
     info "Starting manager services..."
@@ -330,7 +328,6 @@ cmd_start() {
     fi
 }
 
-# Stop the manager docker stack
 cmd_stop() {
     if ! ensure_compose_cmd; then return 1; fi
     info "Stopping manager services..."
@@ -338,12 +335,10 @@ cmd_stop() {
     success "Manager services stopped"
 }
 
-# Restart the manager docker stack
 cmd_restart() {
     cmd_stop && cmd_start
 }
 
-# Rebuild manager containers from images
 cmd_build() {
     if ! ensure_compose_cmd; then return 1; fi
     info "Rebuilding manager containers..."
@@ -351,7 +346,6 @@ cmd_build() {
     success "Containers rebuilt"
 }
 
-# Stop services, pull latest code, rebuild, then offer to restart
 cmd_update() {
     if ! ensure_compose_cmd; then return 1; fi
 
@@ -396,7 +390,6 @@ cmd_update() {
     esac
 }
 
-# Enroll a new agent with certificate and token
 cmd_enroll() {
     if [ $# -lt 2 ]; then
         warn "Usage: enroll <agent-name> <agent-host>"
@@ -412,6 +405,13 @@ cmd_enroll() {
 
     agent_host="${agent_host#https://}"
     agent_host="${agent_host#http://}"
+    agent_host="${agent_host%%/*}"
+    agent_host="${agent_host%%:*}"
+
+    if [[ ! "$agent_host" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        error "Invalid agent host. Allowed characters: letters, digits, '.', '-', '_'."
+        return 1
+    fi
 
     if [ ! -f "$PKI_DIR/ca.key" ]; then
         error "CA not initialized. Run 'install' first."
@@ -420,40 +420,43 @@ cmd_enroll() {
 
     info "Enrolling agent '$agent_name' ($agent_host)..."
 
-    _gen_cert "$agent_name" "dual" "$agent_host" "localhost" "127.0.0.1"
+    _gen_cert "$agent_name" "dual" "$agent_host" "localhost" "127.0.0.1" || return 1
 
     local token
     token=$(openssl rand -hex 32)
-    local expires
-    expires=$(date -d "+10 minutes" -Iseconds 2>/dev/null || date -v+10M -Iseconds 2>/dev/null)
+    if [[ ! "$token" =~ ^[a-f0-9]{64}$ ]]; then
+        error "Failed to generate enrollment token"
+        return 1
+    fi
 
-    python3 -c "
-from pymongo import MongoClient
+    if ! python3 - "$token" "$agent_name" "$agent_host" <<'PY' 2>/dev/null
+import sys
 from datetime import datetime, timezone, timedelta
-client = MongoClient('mongodb://127.0.0.1:27017')
-db = client['melissae']
+from pymongo import MongoClient
+
+token, agent_name, agent_host = sys.argv[1:4]
+now = datetime.now(timezone.utc)
+db = MongoClient('mongodb://127.0.0.1:27017', serverSelectionTimeoutMS=3000)['melissae']
 db['enrollment_tokens'].insert_one({
-    'token': '$token',
-    'agent_id': '$agent_name',
-    'cert_dir': '/certs/$agent_name',
-    'expires_at': '$expires',
-    'created_at': datetime.now(timezone.utc).isoformat()
+    'token': token,
+    'agent_id': agent_name,
+    'cert_dir': '/certs/' + agent_name,
+    'expires_at': (now + timedelta(minutes=10)).isoformat(),
+    'created_at': now.isoformat(),
 })
 db['agents'].update_one(
-    {'agent_id': '$agent_name'},
-    {'\$set': {
-        'agent_id': '$agent_name',
-        'host': '$agent_host',
+    {'agent_id': agent_name},
+    {'$set': {
+        'agent_id': agent_name,
+        'host': agent_host,
         'health_port': 8444,
         'status': 'pending',
-        'registered_at': datetime.now(timezone.utc).isoformat()
+        'registered_at': now.isoformat(),
     }},
-    upsert=True
+    upsert=True,
 )
-print('OK')
-" 2>/dev/null
-
-    if [ $? -ne 0 ]; then
+PY
+    then
         error "Failed to store enrollment token. Is MongoDB running?"
         return 1
     fi
@@ -484,7 +487,6 @@ print('OK')
     echo
 }
 
-# List registered agents with health status
 cmd_agents() {
     echo
     echo -e "${BOLD}${WHITE}   REGISTERED AGENTS${RESET}"
@@ -524,7 +526,6 @@ if not found:
     echo
 }
 
-# Revoke an agent certificate and unregister it
 cmd_revoke() {
     if [ $# -eq 0 ]; then
         warn "Usage: revoke <agent-name>"
@@ -557,7 +558,6 @@ print('OK')
     success "Agent '$agent_name' revoked and unregistered"
 }
 
-# List available honeypot module types
 cmd_modules() {
     echo
     echo -e "${BOLD}${WHITE}   AVAILABLE HONEYPOT MODULES${RESET}"
@@ -591,6 +591,10 @@ cmd_agent_exec() {
 
     if ! _validate_name "$agent_name"; then
         error "Invalid agent name."
+        return 1
+    fi
+    if ! _validate_name "$module"; then
+        error "Invalid module name."
         return 1
     fi
 
@@ -681,7 +685,6 @@ for svc in data.get('services', []):
     fi
 }
 
-# Display recent logs from a specific agent
 cmd_agent_logs() {
     if [ $# -eq 0 ]; then
         warn "Usage: agent-logs <agent-name> [count]"
@@ -704,15 +707,16 @@ cmd_agent_logs() {
     echo -e "${DIM}   ─────────────────────────────────────────────────${RESET}"
 
     python3 -c "
+import re
 from pymongo import MongoClient
 client = MongoClient('mongodb://127.0.0.1:27017', serverSelectionTimeoutMS=2000)
 db = client['melissae']
 events = db['logs'].find({'agent_id': '$agent_name'}).sort('timestamp', -1).limit($count)
 for e in events:
     ts = e.get('timestamp', '')
-    proto = (e.get('protocol', '?'))[:6]
-    ip = e.get('ip', 'unknown')
-    action = (e.get('action', ''))[:30]
+    proto = re.sub(r'[\x00-\x1f\x7f|]', '', str(e.get('protocol', '?')))[:6]
+    ip = re.sub(r'[\x00-\x1f\x7f|]', '', str(e.get('ip', 'unknown')))
+    action = re.sub(r'[\x00-\x1f\x7f|]', '', str(e.get('action', '')))[:30]
     print(f'{ts}|{proto}|{ip}|{action}')
 " 2>/dev/null | while IFS='|' read -r ts proto ip action; do
         local color="$WHITE"
@@ -725,7 +729,6 @@ for e in events:
     echo
 }
 
-# Manage certificates (list or renew)
 cmd_certs() {
     local subcmd="${1:-}"
     case "$subcmd" in
@@ -771,14 +774,14 @@ client = MongoClient('mongodb://127.0.0.1:27017')
 a = client['melissae']['agents'].find_one({'agent_id': '$agent_name'})
 print(a.get('host', '') if a else '')
 " 2>/dev/null)
-            if [ -z "$host" ]; then
-                error "Agent '$agent_name' not found"
+            if [ -z "$host" ] || [[ ! "$host" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                error "Agent '$agent_name' not found or has an invalid host"
                 return 1
             fi
             info "Revoking old certificate..."
             _revoke_cert "$agent_name" 2>/dev/null
             info "Generating new certificate..."
-            _gen_cert "$agent_name" "dual" "$host" "localhost" "127.0.0.1"
+            _gen_cert "$agent_name" "dual" "$host" "localhost" "127.0.0.1" || return 1
             success "Certificate renewed for '$agent_name'. Re-run enrollment on the agent."
             ;;
         *)
@@ -787,7 +790,6 @@ print(a.get('host', '') if a else '')
     esac
 }
 
-# Display attack statistics from MongoDB
 cmd_stats() {
     echo
     echo -e "${BOLD}${WHITE}   ATTACK STATISTICS${RESET}"
@@ -855,7 +857,6 @@ except Exception as e:
     echo
 }
 
-# Display top threat IPs with scores
 cmd_threats() {
     echo
     echo -e "${BOLD}${WHITE}   THREAT INTELLIGENCE${RESET}"
@@ -886,7 +887,6 @@ for t in threats:
     echo
 }
 
-# Display recent events from the logs
 cmd_events() {
     local count=${1:-20}
     if ! _validate_int "$count"; then
@@ -900,16 +900,18 @@ cmd_events() {
     python3 -c "
 from pymongo import MongoClient
 from datetime import datetime
+import re
 client = MongoClient('mongodb://127.0.0.1:27017', serverSelectionTimeoutMS=2000)
 db = client['melissae']
 events = db.logs.find().sort('timestamp', -1).limit($count)
+clean = lambda v: re.sub(r'[\x00-\x1f\x7f|]', '', str(v))
 for e in events:
     ts = e.get('timestamp', '')
     if isinstance(ts, datetime): ts = ts.strftime('%H:%M:%S')
-    proto = e.get('protocol', '?')[:6]
-    ip = e.get('ip', 'unknown')
-    action = e.get('action', '')[:30]
-    agent = e.get('agent_id', '-')[:10]
+    proto = clean(e.get('protocol', '?'))[:6]
+    ip = clean(e.get('ip', 'unknown'))
+    action = clean(e.get('action', ''))[:30]
+    agent = clean(e.get('agent_id', '-'))[:10]
     print(f'{ts}|{proto}|{ip}|{action}|{agent}')
 " 2>/dev/null | while IFS='|' read -r ts proto ip action agent; do
         local color="$WHITE"
@@ -922,10 +924,10 @@ for e in events:
     echo
 }
 
-# Stop and remove all manager containers
 cmd_destroy() {
     warn "This will stop and remove ALL manager containers."
-    read -p "Are you sure? (yes/no): " confirm
+    local confirm
+    read -r -p "Are you sure? (yes/no): " confirm
     if [ "$confirm" != "yes" ]; then
         info "Cancelled"
         return 0
@@ -936,12 +938,14 @@ cmd_destroy() {
 }
 
 _disable_inspektor_env() {
-    umask 077
-    {
-        echo "# Melissae manager environment - generated by the installer"
-        echo "# Inspektor AI analyst is disabled. Run 'inspektor' to enable it."
-        echo "COMPOSE_PROFILES="
-    } > "$ENV_FILE"
+    (
+        umask 077
+        {
+            echo "# Melissae manager environment - generated by the installer"
+            echo "# Inspektor AI analyst is disabled. Run 'inspektor' to enable it."
+            echo "COMPOSE_PROFILES="
+        } > "$ENV_FILE"
+    )
     chmod 600 "$ENV_FILE" 2>/dev/null || true
 }
 
@@ -981,22 +985,23 @@ _configure_inspektor() {
     read -r -p "Bedrock Model ID [anthropic.claude-3-5-sonnet-20240620-v1:0]: " aws_model
     aws_model=${aws_model:-anthropic.claude-3-5-sonnet-20240620-v1:0}
 
-    umask 077
-    {
-        echo "# Melissae manager environment - generated by the installer"
-        echo "# Contains AWS Bedrock credentials for Inspektor. Keep this file secret."
-        echo "COMPOSE_PROFILES=inspektor"
-        echo "AWS_ACCESS_KEY_ID=${aws_key}"
-        echo "AWS_SECRET_ACCESS_KEY=${aws_secret}"
-        echo "AWS_SESSION_TOKEN=${aws_token}"
-        echo "AWS_REGION=${aws_region}"
-        echo "BEDROCK_MODEL_ID=${aws_model}"
-    } > "$ENV_FILE"
+    (
+        umask 077
+        {
+            echo "# Melissae manager environment - generated by the installer"
+            echo "# Contains AWS Bedrock credentials for Inspektor. Keep this file secret."
+            echo "COMPOSE_PROFILES=inspektor"
+            echo "AWS_ACCESS_KEY_ID=${aws_key}"
+            echo "AWS_SECRET_ACCESS_KEY=${aws_secret}"
+            echo "AWS_SESSION_TOKEN=${aws_token}"
+            echo "AWS_REGION=${aws_region}"
+            echo "BEDROCK_MODEL_ID=${aws_model}"
+        } > "$ENV_FILE"
+    )
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     success "Inspektor enabled. Credentials saved to .env (chmod 600)."
 }
 
-# Enable/disable or reconfigure Inspektor after installation
 cmd_inspektor() {
     _configure_inspektor
     if ! ensure_compose_cmd; then return 1; fi
@@ -1014,7 +1019,6 @@ cmd_inspektor() {
     fi
 }
 
-# Install the manager stack and initialize PKI
 cmd_install() {
     echo
     info "Starting Melissae Manager installation..."
@@ -1067,14 +1071,15 @@ cmd_install() {
         break
     done
 
-    _init_ca "$ca_cn" "$ca_org"
+    _init_ca "$ca_cn" "$ca_org" || return 1
 
     echo
     info "Manager certificate configuration"
     echo -e "  Detected IP:       ${WHITE}$manager_ip${RESET}"
     echo -e "  Detected hostname: ${WHITE}$manager_hostname${RESET}"
     echo
-    read -p "Public FQDN or IP (e.g. manager.example.com) [${manager_ip}]: " manager_fqdn
+    local manager_fqdn
+    read -r -p "Public FQDN or IP (e.g. manager.example.com) [${manager_ip}]: " manager_fqdn
     manager_fqdn=${manager_fqdn:-$manager_ip}
 
     local san_args=("$manager_fqdn")
@@ -1085,18 +1090,19 @@ cmd_install() {
     san_args+=("localhost" "127.0.0.1")
 
     info "Generating manager certificate (SANs: ${san_args[*]})..."
-    _CERT_CN="$manager_fqdn" _gen_cert "manager" "dual" "${san_args[@]}"
+    _CERT_CN="$manager_fqdn" _gen_cert "manager" "dual" "${san_args[@]}" || return 1
 
     printf '%s\n' "$manager_fqdn" > "$PKI_DIR/manager.fqdn"
     chmod 600 "$PKI_DIR/manager.fqdn"
 
     echo
     info "Configure dashboard authentication"
-    read -p "Username [melissae]: " dash_user
+    local dash_user dash_pass dash_confirm
+    read -r -p "Username [melissae]: " dash_user
     dash_user=${dash_user:-melissae}
     while true; do
-        read -s -p "Password: " dash_pass; echo
-        read -s -p "Confirm: " dash_confirm; echo
+        read -r -s -p "Password: " dash_pass; echo
+        read -r -s -p "Confirm: " dash_confirm; echo
         if [ -z "$dash_pass" ]; then
             warn "Password cannot be empty"
             continue
@@ -1107,7 +1113,10 @@ cmd_install() {
         fi
         break
     done
-    htpasswd -Bbc "$WORKING_DIRECTORY/dashboard/conf/htpasswd" "$dash_user" "$dash_pass" > /dev/null 2>&1
+    if ! printf '%s\n' "$dash_pass" | htpasswd -Bic "$WORKING_DIRECTORY/dashboard/conf/htpasswd" "$dash_user" > /dev/null 2>&1; then
+        error "Failed to write dashboard credentials (is htpasswd installed?)"
+        return 1
+    fi
     success "Dashboard credentials saved"
 
     _configure_inspektor
@@ -1144,211 +1153,6 @@ $cmd"
     echo
 }
 
-# DecoyDex integration command
-cmd_decoydex() {
-    local action="${1:-}"
-    local DECOYDEX_SCRIPT="$WORKING_DIRECTORY/scripts/decoydex_integration.py"
-    
-    # Check both possible config locations
-    if [ -f "/etc/melissae/decoydex.conf" ] && [ -r "/etc/melissae/decoydex.conf" ]; then
-        local DECOYDEX_CONF="/etc/melissae/decoydex.conf"
-    else
-        local DECOYDEX_CONF="$HOME/.melissae/decoydex.conf"
-    fi
-    
-    if [ ! -f "$DECOYDEX_SCRIPT" ]; then
-        error "DecoyDex integration script not found at: $DECOYDEX_SCRIPT"
-        return 1
-    fi
-    
-    case "$action" in
-        enroll)
-            echo
-            info "DecoyDex Manager Enrollment"
-            echo
-            
-            # Prompt for DecoyDex URL
-            local decoydex_url
-            read -p "$(echo -e "${CYAN}DecoyDex URL${RESET} (e.g., https://decoydex.example.com): ")" decoydex_url
-            if [ -z "$decoydex_url" ]; then
-                error "URL is required"
-                return 1
-            fi
-            
-            # Prompt for manager URL
-            local manager_url
-            read -p "$(echo -e "${CYAN}This manager's URL${RESET} (e.g., https://$(hostname):8443): ")" manager_url
-            if [ -z "$manager_url" ]; then
-                error "Manager URL is required"
-                return 1
-            fi
-            
-            echo
-            echo -e "${YELLOW}Please get enrollment token from DecoyDex dashboard:${RESET}"
-            echo -e "  1. Login to ${decoydex_url}"
-            echo -e "  2. Go to Dashboard → Enroll Manager"
-            echo -e "  3. Enter manager URL: ${manager_url}"
-            echo -e "  4. Copy the enrollment token and challenge"
-            echo
-            
-            # Prompt for token
-            local token
-            read -p "$(echo -e "${CYAN}Enrollment Token${RESET}: ")" token
-            if [ -z "$token" ]; then
-                error "Token is required"
-                return 1
-            fi
-            
-            # Prompt for challenge
-            local challenge
-            read -p "$(echo -e "${CYAN}Challenge${RESET}: ")" challenge
-            if [ -z "$challenge" ]; then
-                error "Challenge is required"
-                return 1
-            fi
-            
-            echo
-            info "Enrolling with DecoyDex..."
-            
-            # Run enrollment
-            if python3 "$DECOYDEX_SCRIPT" enroll \
-                --decoydex-url "$decoydex_url" \
-                --token "$token" \
-                --challenge "$challenge" \
-                --manager-url "$manager_url" \
-                --manager-name "$(hostname)"; then
-                
-                echo
-                success "Enrollment complete!"
-                echo
-                
-                # Ask if user wants to setup automatic sync
-                read -p "$(echo -e "${CYAN}Setup automatic IoC sync (every 5 min)?${RESET} [Y/n]: ")" setup_sync
-                if [[ "$setup_sync" =~ ^[Yy]?$ ]]; then
-                    _setup_decoydex_sync "$decoydex_url"
-                fi
-            else
-                error "Enrollment failed"
-                return 1
-            fi
-            ;;
-            
-        sync)
-            if [ ! -f "$DECOYDEX_CONF" ]; then
-                error "Not enrolled with DecoyDex. Run: decoydex enroll"
-                return 1
-            fi
-            
-            local since_hours="${2:-1}"
-            info "Syncing IoCs from last $since_hours hour(s)..."
-            python3 "$DECOYDEX_SCRIPT" sync --since-hours "$since_hours"
-            ;;
-            
-        status)
-            echo
-            if [ -f "$DECOYDEX_CONF" ]; then
-                success "Enrolled with DecoyDex"
-                echo
-                echo -e "${DIM}Configuration: $DECOYDEX_CONF${RESET}"
-                
-                if command -v systemctl >/dev/null 2>&1; then
-                    if systemctl is-active --quiet decoydex_sync.timer 2>/dev/null; then
-                        success "Auto-sync: ACTIVE (every 5 min)"
-                        echo
-                        systemctl status decoydex_sync.timer --no-pager | head -n 5
-                    else
-                        warn "Auto-sync: NOT CONFIGURED"
-                        echo -e "${DIM}  Run: decoydex enroll${RESET}"
-                    fi
-                fi
-            else
-                warn "Not enrolled with DecoyDex"
-                echo
-                echo -e "${DIM}  Run: decoydex enroll${RESET}"
-            fi
-            echo
-            ;;
-            
-        test)
-            if [ ! -f "$DECOYDEX_CONF" ]; then
-                error "Not enrolled with DecoyDex. Run: decoydex enroll"
-                return 1
-            fi
-            
-            info "Testing DecoyDex connection..."
-            python3 "$DECOYDEX_SCRIPT" test
-            ;;
-            
-        *)
-            error "Unknown action: $action"
-            echo
-            echo -e "${DIM}Available actions:${RESET}"
-            echo -e "  ${CYAN}decoydex enroll${RESET}   - Enroll this manager"
-            echo -e "  ${CYAN}decoydex sync${RESET}     - Manually sync IoCs"
-            echo -e "  ${CYAN}decoydex status${RESET}   - Show enrollment status"
-            echo -e "  ${CYAN}decoydex test${RESET}     - Test connection"
-            return 1
-            ;;
-    esac
-}
-
-# Setup DecoyDex automatic sync
-_setup_decoydex_sync() {
-    local decoydex_url="$1"
-    
-    info "Setting up automatic sync..."
-    
-    # Create systemd service
-    local service_file="/etc/systemd/system/decoydex_sync.service"
-    local timer_file="/etc/systemd/system/decoydex_sync.timer"
-    
-    sudo tee "$service_file" > /dev/null <<EOF
-[Unit]
-Description=Melissae to DecoyDex IoC Sync Service
-After=network.target mongodb.service
-
-[Service]
-Type=oneshot
-User=$USER
-WorkingDirectory=$WORKING_DIRECTORY
-ExecStart=/usr/bin/python3 $WORKING_DIRECTORY/scripts/decoydex_integration.py sync --since-hours 1
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo tee "$timer_file" > /dev/null <<EOF
-[Unit]
-Description=Melissae to DecoyDex IoC Sync Timer
-Requires=decoydex_sync.service
-
-[Timer]
-OnBootSec=5min
-OnUnitActiveSec=5min
-AccuracySec=1min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-    # Reload systemd and enable timer
-    sudo systemctl daemon-reload
-    sudo systemctl enable decoydex_sync.timer
-    sudo systemctl start decoydex_sync.timer
-    
-    success "Automatic sync configured"
-    echo -e "${DIM}  Service: decoydex_sync.service${RESET}"
-    echo -e "${DIM}  Timer: decoydex_sync.timer${RESET}"
-    echo -e "${DIM}  Interval: every 5 minutes${RESET}"
-    echo
-    echo -e "${CYAN}Useful commands:${RESET}"
-    echo -e "  ${WHITE}systemctl status decoydex_sync.timer${RESET}  - Check timer status"
-    echo -e "  ${WHITE}journalctl -u decoydex_sync.service -f${RESET} - Follow sync logs"
-}
-
-# Main interactive CLI loop with command dispatch
 main_loop() {
     print_banner
 
@@ -1393,7 +1197,6 @@ main_loop() {
             events)         cmd_events "${params[@]}" ;;
             install)        cmd_install ;;
             inspektor)      cmd_inspektor ;;
-            decoydex)      cmd_decoydex "${params[@]}" ;;
             destroy)        cmd_destroy ;;
             clear|cls)      clear ;;
             banner)         print_banner ;;

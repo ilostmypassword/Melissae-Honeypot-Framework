@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { fetchLogs, fetchLogStats, fetchAgents, fetchAlerts } from '../api'
+import { fetchLogs, fetchLogStats, fetchLogTimeline, fetchAgents, fetchAlerts } from '../api'
 import StatCard from '../components/StatCard'
 import { SeverityTag } from '../components/Tags'
 import { DailyChart, ProtocolChart } from '../components/charts'
 import AgentTopology from '../components/AgentTopology'
 import InspektorBriefing from '../components/InspektorBriefing'
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
+import { buildGroups } from './Alerts'
 
 const REFRESH_INTERVAL = 30_000
 const DATE_RANGES = [
@@ -16,10 +17,11 @@ const DATE_RANGES = [
   { label: 'All', value: 'all' },
 ]
 
-// Main dashboard page with stats and charts
+
 export default function Dashboard() {
   const [logs, setLogs] = useState([])
   const [logStats, setLogStats] = useState(null)
+  const [timeline, setTimeline] = useState(null)
   const [agents, setAgents] = useState([])
   const [recentAlerts, setRecentAlerts] = useState([])
   const [selectedAgent, setSelectedAgent] = useState('')
@@ -36,14 +38,16 @@ export default function Dashboard() {
   const loadData = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
     try {
-      const [logsData, statsData, agentsData, alertsData] = await Promise.all([
+      const [logsData, statsData, timelineData, agentsData, alertsData] = await Promise.all([
         fetchLogs(selectedAgent ? { agent_id: selectedAgent } : {}),
         fetchLogStats({ agent_id: selectedAgent, range: dateRange }).catch(() => null),
+        fetchLogTimeline({ agent_id: selectedAgent, range: dateRange }).catch(() => null),
         fetchAgents().catch(() => []),
-        fetchAlerts({ status: 'new', limit: 20 }).catch(() => []),
+        fetchAlerts({ status: 'new', limit: 100 }).catch(() => []),
       ])
       setLogs(logsData)
       setLogStats(statsData)
+      setTimeline(timelineData)
       setAgents(agentsData)
       setRecentAlerts(Array.isArray(alertsData) ? alertsData : [])
       setLastRefresh(Date.now())
@@ -68,6 +72,8 @@ export default function Dashboard() {
     return () => clearInterval(t)
   }, [lastRefresh])
 
+  const recentAlertGroups = useMemo(() => buildGroups(recentAlerts), [recentAlerts])
+
   useEffect(() => {
     const el = alertsListRef.current
     if (!el) return
@@ -81,7 +87,7 @@ export default function Dashboard() {
     const ro = new ResizeObserver(compute)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [recentAlerts.length])
+  }, [recentAlertGroups.length])
 
   const agentIds = useMemo(() => {
     const fromAgents = agents.map(a => a.agent_id).filter(Boolean)
@@ -100,6 +106,10 @@ export default function Dashboard() {
     navigate(`/search?q=${encodeURIComponent(term)}${agentParam}`)
   }
 
+  // Server-side buckets cover the whole history (already filtered by agent and
+  // range); the raw 5000-log window only remains as a degraded fallback
+  const chartRows = timeline ?? filteredLogs
+
   const s = logStats || computeStats(filteredLogs)
   const prevS = useMemo(() => computeTrend(logs, selectedAgent), [logs, selectedAgent])
   const healthyAgents = agents.filter(a => a.status === 'healthy').length
@@ -109,7 +119,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Dashboard</h1>
@@ -144,7 +154,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[10px] text-text-muted font-mono tracking-wide">
-            {formatNumber(filteredLogs.length)} logs
+            {formatNumber(s.totalLogs)} logs
           </span>
           <span className="text-[10px] text-text-muted flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-verdict-benign rounded-full animate-pulse-slow" />
@@ -153,7 +163,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Key Metrics */}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard value={s.totalLogs} label="Total Logs" trend={prevS.totalTrend} />
         <StatCard value={s.uniqueIPs} label="Unique IPs" trend={prevS.ipTrend} />
@@ -163,7 +173,7 @@ export default function Dashboard() {
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
 
-      {/* AI threat briefing by Inspektor */}
+
       <InspektorBriefing />
 
       {/* Recent alerts + Topology side by side - row sized for 7 alerts max */}
@@ -187,22 +197,27 @@ export default function Dashboard() {
               View all →
             </Link>
           </div>
-          {recentAlerts.length > 0 ? (
+          {recentAlertGroups.length > 0 ? (
             <div ref={alertsListRef} className="flex flex-col divide-y divide-border/40 flex-1 overflow-hidden">
-              {recentAlerts.slice(0, maxVisibleAlerts).map(a => (
+              {recentAlertGroups.slice(0, maxVisibleAlerts).map(g => (
                 <Link
-                  key={a._id}
+                  key={g.key}
                   to="/alerts"
                   className="flex items-center gap-2 py-2 hover:bg-surface-hover/30 -mx-2 px-2 rounded-md transition-colors min-w-0"
                 >
-                  <SeverityTag severity={a.severity} />
+                  <SeverityTag severity={g.severity} />
                   <span className="text-xs font-semibold text-text-primary truncate flex-1 min-w-0">
-                    {a.rule_name ? `${a.rule_name}${a.rule_id ? ` [${a.rule_id}]` : ''}` : a.rule_id}
+                    {g.rule_name ? `${g.rule_name}${g.rule_id ? ` [${g.rule_id}]` : ''}` : g.rule_id}
                   </span>
-                  {a.ip && (
-                    <code className="text-[10px] font-mono text-text-secondary shrink-0">{a.ip}</code>
+                  {g.ip && (
+                    <code className="text-[10px] font-mono text-text-secondary shrink-0">{g.ip}</code>
                   )}
-                  <span className="text-[10px] text-text-muted shrink-0 font-mono">+{a.score}</span>
+                  {g.ids.length > 1 && (
+                    <span className="text-[10px] font-mono text-text-muted shrink-0 px-1.5 py-0.5 rounded bg-surface-tertiary border border-border">
+                      ×{g.ids.length}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-text-muted shrink-0 font-mono">+{g.score}</span>
                 </Link>
               ))}
             </div>
@@ -226,18 +241,18 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Daily Activity + Protocol Breakdown */}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-card p-5">
           <h3 className="section-title mb-4">Daily Activity</h3>
           <div className="h-[240px]">
-            <DailyChart logs={filteredLogs} onDayClick={d => goSearch(`date:${d}`)} />
+            <DailyChart logs={chartRows} onDayClick={d => goSearch(`date:${d}`)} />
           </div>
         </div>
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Protocols</h3>
           <div className="max-w-[220px] mx-auto">
-            <ProtocolChart logs={filteredLogs} onClick={p => goSearch(`protocol:${p}`)} />
+            <ProtocolChart logs={chartRows} onClick={p => goSearch(`protocol:${p}`)} />
           </div>
         </div>
       </div>
@@ -245,7 +260,7 @@ export default function Dashboard() {
   )
 }
 
-// Loading skeleton
+
 function LoadingState() {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -266,7 +281,7 @@ function LoadingState() {
   )
 }
 
-// Error message display
+
 function ErrorState({ message }) {
   return (
     <div className="glass-card text-verdict-malicious p-6 text-center border-verdict-malicious/20 animate-fade-in">

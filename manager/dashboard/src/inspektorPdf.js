@@ -1,12 +1,12 @@
 import { jsPDF } from 'jspdf'
 
-// ----- Layout constants (points, A4) --------------------------------------- //
+// Layout constants in points (A4)
 const MARGIN = 44
 const HEADER_H = 84
 const BODY_FS = 10
 const LINE = 14.5
 
-// ----- Palette (mirrors tailwind.config.js dashboard tokens) --------------- //
+// Palette mirrors tailwind.config.js dashboard tokens
 const COL = {
   surface: [10, 14, 19],     // #0a0e13  dark header band
   tertiary: [24, 32, 42],    // #18202a  table header / ink
@@ -25,7 +25,7 @@ const COL = {
   malicious: [192, 125, 125], // #c07d7d
 }
 
-// ----- Logo loading (async, cached) ---------------------------------------- //
+
 let _logoCache // { dataURL, w, h } | null
 async function loadLogo() {
   if (_logoCache !== undefined) return _logoCache
@@ -52,7 +52,7 @@ async function loadLogo() {
   return _logoCache
 }
 
-// ----- Inline tokenizer ---------------------------------------------------- //
+
 // Split a markdown string into styled segments: {text, bold, italic, code}.
 function tokenizeInline(text) {
   const segments = []
@@ -97,7 +97,7 @@ function fontFor(doc, w) {
   else doc.setFont('helvetica', 'normal')
 }
 
-// ----- Text sanitization --------------------------------------------------- //
+
 const PDF_SAFE_HIGH = new Set([
   0x2013, 0x2014,                 // – —
   0x2018, 0x2019, 0x201c, 0x201d, // ‘ ’ “ ”
@@ -126,7 +126,7 @@ function sanitizeText(input) {
   return out
 }
 
-// ----- Document builder ---------------------------------------------------- //
+
 export async function exportReportToPdf(markdown, meta = {}) {
   const logo = await loadLogo()
   const doc = new jsPDF({ unit: 'pt', format: 'a4', compress: true })
@@ -150,11 +150,11 @@ export async function exportReportToPdf(markdown, meta = {}) {
     if (y + h > bottom) newPage()
   }
 
-  // Branded header band (page 1 only)
+
   const drawHeader = () => {
     setFill(COL.surface)
     doc.rect(0, 0, pageW, HEADER_H, 'F')
-    // thin accent rule along the bottom of the band
+
     setFill(COL.accent)
     doc.rect(0, HEADER_H - 2, pageW, 2, 'F')
 
@@ -177,7 +177,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
     y = HEADER_H + 26
   }
 
-  // Meta line under the header
+
   const drawMeta = () => {
     const bits = []
     if (meta.generated_at) bits.push(`Generated  ${new Date(meta.generated_at).toLocaleString()}`)
@@ -243,7 +243,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
     return y
   }
 
-  // ----- Table rendering --------------------------------------------------- //
+
   const colWidthsFor = header => {
     const cols = header.length
     return new Array(cols).fill(usableW / cols)
@@ -285,7 +285,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
         x += colW[ci]
       })
 
-      // vertical separators on body rows
+
       setDraw(COL.faint)
       doc.setLineWidth(0.5)
       for (let ci = 1; ci < cols && kind !== 'head'; ci++) {
@@ -308,7 +308,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
     }
   }
 
-  // ----- List item --------------------------------------------------------- //
+
   const renderListItem = (marker, text) => {
     const indent = 16
     ensure(LINE)
@@ -319,7 +319,7 @@ export async function exportReportToPdf(markdown, meta = {}) {
     drawRich(text, MARGIN + indent, usableW - indent)
   }
 
-  // ----- Render the markdown body ------------------------------------------ //
+
   drawHeader()
   drawMeta()
 
@@ -400,18 +400,18 @@ export async function exportReportToPdf(markdown, meta = {}) {
       i++; continue
     }
 
-    // Bullet list
+
     if (line.startsWith('- ') || line.startsWith('* ')) {
       renderListItem('•', line.slice(2))
       orderedIdx = 0; i++; continue
     }
 
-    // Paragraph
+
     drawRich(line, MARGIN, usableW)
     orderedIdx = 0; i++
   }
 
-  // ----- Footers on every page --------------------------------------------- //
+
   const pages = doc.getNumberOfPages()
   const stampStr = new Date().toLocaleDateString()
   for (let p = 1; p <= pages; p++) {

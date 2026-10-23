@@ -1,18 +1,18 @@
-// Validate and sanitize an IP address string
+
 function sanitizeIP(ip) {
   const str = String(ip || '').trim()
   if (/^[0-9a-fA-F.:]+$/.test(str)) return str
   return 'invalid-ip'
 }
 
-// Normalize a verdict string to a known value
+
 function sanitizeVerdict(verdict) {
   const allowed = ['benign', 'suspicious', 'malicious', 'unknown']
   const v = String(verdict || 'unknown').toLowerCase()
   return allowed.includes(v) ? v : 'unknown'
 }
 
-// Convert a value to a short printable string for STIX descriptions
+
 function sanitizeText(value, maxLength = 160) {
   return String(value || '')
     .replace(/[\r\n\t]+/g, ' ')
@@ -21,7 +21,7 @@ function sanitizeText(value, maxLength = 160) {
     .slice(0, maxLength)
 }
 
-// Format a compact list for human-readable STIX descriptions
+
 function formatList(values, maxItems = 4) {
   const items = [...new Set((values || []).map(v => sanitizeText(v)).filter(Boolean))]
   if (items.length === 0) return null
@@ -30,7 +30,7 @@ function formatList(values, maxItems = 4) {
   return remaining > 0 ? `${visible}, +${remaining} more` : visible
 }
 
-// Build a contextual IOC description from Melissae threat data
+
 function buildIndicatorDescription(threat, ip, verdict, scoreText) {
   const parts = [
     `Attacker IP ${ip} was observed by Melissae-Honeypot-Framework and classified as ${verdict} ${scoreText}.`,
@@ -58,7 +58,7 @@ function buildIndicatorDescription(threat, ip, verdict, scoreText) {
   return parts.join(' ')
 }
 
-// Generate a random UUID v4
+
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15
@@ -67,7 +67,7 @@ function uuidv4() {
   })
 }
 
-// Build a STIX 2.1 bundle from threat data
+
 export function buildStixBundle(threats) {
   const now = new Date().toISOString()
   const identityId = `identity--${uuidv4()}`
@@ -115,7 +115,7 @@ export function buildStixBundle(threats) {
   }
 }
 
-// Download a JSON object as a file
+
 export function downloadJson(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

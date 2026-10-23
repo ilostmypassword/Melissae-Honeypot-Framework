@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchLogs, fetchAgents } from '../api'
+import { fetchAllLogs, fetchLogTimeline, fetchAgents } from '../api'
 import { DailyChart, ActivityChart, Heatmap, AgentBarChart, ProtocolTimelineChart } from '../components/charts'
 import { filterByDateRange, formatNumber } from '../utils'
 
@@ -11,7 +11,7 @@ const DATE_RANGES = [
   { label: 'All', value: 'all' },
 ]
 
-// Activity statistics: timeline, hourly distribution, heatmap, per-agent breakdown
+
 export default function ActivityStats() {
   const [logs, setLogs] = useState([])
   const [selectedAgent, setSelectedAgent] = useState('')
@@ -21,8 +21,13 @@ export default function ActivityStats() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    Promise.all([fetchLogs(), fetchAgents().catch(() => [])])
-      .then(([logsData]) => setLogs(logsData))
+    // Server-side buckets cover the whole history; the newest-5000 raw logs
+    // window only remains as a degraded fallback if the endpoint is missing
+    Promise.all([
+      fetchLogTimeline().catch(() => null),
+      fetchAgents().catch(() => []),
+    ])
+      .then(async ([buckets]) => setLogs(buckets ?? await fetchAllLogs()))
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
@@ -48,7 +53,7 @@ export default function ActivityStats() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Traffic</h1>
@@ -78,11 +83,11 @@ export default function ActivityStats() {
           </div>
         </div>
         <span className="text-[10px] text-text-muted font-mono tracking-wide">
-          {formatNumber(filteredLogs.length)} logs
+          {formatNumber(filteredLogs.reduce((sum, l) => sum + (l.count || 1), 0))} logs
         </span>
       </div>
 
-      {/* Daily Timeline (full width) */}
+
       <div className="glass-card p-5">
         <h3 className="section-title mb-4">Daily Timeline</h3>
         <div className="h-[260px]">
@@ -90,7 +95,7 @@ export default function ActivityStats() {
         </div>
       </div>
 
-      {/* Protocol Timeline (moved from Dashboard) */}
+
       <div className="glass-card p-5">
         <h3 className="section-title mb-4">Protocol Timeline</h3>
         <div className="h-[220px]">
@@ -98,7 +103,7 @@ export default function ActivityStats() {
         </div>
       </div>
 
-      {/* Hourly Distribution + Heatmap */}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Hourly Distribution</h3>
@@ -112,7 +117,7 @@ export default function ActivityStats() {
         </div>
       </div>
 
-      {/* Logs per Agent (only shown when multiple agents exist) */}
+
       {agentIds.length > 1 && (
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Logs per Agent</h3>

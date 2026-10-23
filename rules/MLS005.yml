@@ -1,8 +1,8 @@
 id: MLS005
 name: HTTP request burst (Web Scanning)
 description: >
-  Burst of dynamic HTTP requests from the same source within 5 minutes
-  (>=10). Static-asset hits (CSS, JS, images, fonts, source maps) are
+  Burst of dynamic HTTP requests from the same source within 3 minutes
+  (>=15). Static-asset hits (CSS, JS, images, fonts, source maps) are
   filtered out so a normal page load with many sub-resources does not
   trip the rule; only repeated probing of dynamic endpoints triggers.
 severity: low

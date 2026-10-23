@@ -14,7 +14,8 @@ PATTERNS = {
             'date': re.compile(r'(?P<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2})'),
             'ip': re.compile(r'from\s+(?P<ip>\d+\.\d+\.\d+\.\d+)'),
             'action': re.compile(r'(?P<action>Failed password|Accepted password|Accepted publickey|Accepted keyboard-interactive|Invalid user|Connection closed)'),
-            'user': re.compile(r'(?:for|user)\s+(?P<user>\S+)')
+            'user': re.compile(r'(?:for|user)\s+(?:invalid user\s+)?(?P<user>\S+)'),
+            'port': re.compile(r'port\s+(?P<port>\d+)')
         }
     },
     'ssh_commands': {
@@ -93,17 +94,16 @@ PATTERNS = {
 TELNET_PID_RE = re.compile(r'login\[(?P<pid>\d+)\]:')
 TELNET_RHOST_RE = re.compile(r'rhost=(?P<ip>\d+\.\d+\.\d+\.\d+)')
 
-# Compute a unique hash for deduplication
 def compute_uid(log: Dict) -> str:
-    key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'action', 'path', 'user', 'user-agent']
+    key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'port', 'action', 'path', 'user', 'user-agent']
     payload = {k: log.get(k) for k in key_fields if k in log}
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
-# Create a standardized log entry dict
 def create_entry(protocol: str, dt: datetime, ip: str, action: str,
                  path: str = None, user_agent: str = None,
-                 user: Optional[str] = None, cve: Optional[str] = None) -> Dict:
+                 user: Optional[str] = None, cve: Optional[str] = None,
+                 port: Optional[int] = None) -> Dict:
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc)
     else:
@@ -125,29 +125,27 @@ def create_entry(protocol: str, dt: datetime, ip: str, action: str,
         entry["user"] = user
     if cve:
         entry["cve"] = cve
+    if port is not None:
+        entry["port"] = port
     entry["hash"] = compute_uid(entry)
     return entry
 
-# Parse an ISO 8601 timestamp string
 def parse_iso8601_ts(datetime_str: str) -> datetime:
     cleaned = datetime_str.replace('Z', '+00:00')
     return datetime.fromisoformat(cleaned).astimezone(timezone.utc)
 
-# Load file read positions from disk
 def load_file_states(state_path: str) -> Dict:
     if os.path.exists(state_path):
         with open(state_path, 'r') as f:
             return json.load(f)
     return {"files": {}, "telnet_pid_to_ip": {}}
 
-# Save file read positions to disk
 def save_file_states(state_path: str, state: Dict) -> None:
     tmp = state_path + '.tmp'
     with open(tmp, 'w') as f:
         json.dump(state, f)
     os.replace(tmp, state_path)
 
-# Read new lines from a log file since last position
 def read_new_lines(source: str, file_states: Dict) -> List[str]:
     if not os.path.exists(source):
         return []
@@ -165,10 +163,21 @@ def read_new_lines(source: str, file_states: Dict) -> List[str]:
         if inode != prev_inode or size < offset or mtime < prev_mtime:
             offset = 0
 
-        with open(source, 'r', encoding='utf-8') as f:
+        with open(source, 'rb') as f:
             f.seek(offset)
-            lines = f.readlines()
-            new_offset = f.tell()
+            data = f.read()
+
+        # Only consume complete lines: a line still being written (no trailing
+        # newline yet) stays unread until the next pass, otherwise it would be
+        # consumed half-parsed and lost for good
+        if data and not data.endswith(b'\n'):
+            last_nl = data.rfind(b'\n')
+            data = data[:last_nl + 1] if last_nl != -1 else b''
+        new_offset = offset + len(data)
+        # Split strictly on \n (splitlines would also break on \v, \f, \x85…
+        # which can appear inside attacker-controlled log content)
+        lines = [chunk.decode('utf-8', errors='replace') + '\n'
+                 for chunk in data.split(b'\n')[:-1]]
 
         file_states[source] = {
             'offset': new_offset,
@@ -181,7 +190,6 @@ def read_new_lines(source: str, file_states: Dict) -> List[str]:
         print(f"[log_parser] Unable to read {source}: {e}")
         return []
 
-# Parse SSH authentication log lines
 def parse_ssh_auth(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['ssh_auth']['source'])
@@ -191,6 +199,7 @@ def parse_ssh_auth(logs_dir: str, file_states: Dict) -> List[Dict]:
         ip_match = p['ip'].search(line)
         action_match = p['action'].search(line)
         user_match = p['user'].search(line)
+        port_match = p['port'].search(line)
 
         if not ip_match or not action_match:
             continue
@@ -219,10 +228,10 @@ def parse_ssh_auth(logs_dir: str, file_states: Dict) -> List[Dict]:
         }.get(action_match.group('action'), action_match.group('action'))
 
         logs.append(create_entry('ssh', dt, ip_match.group('ip'), action_desc,
-                                 user=user_match.group('user') if user_match else None))
+                                 user=user_match.group('user') if user_match else None,
+                                 port=int(port_match.group('port')) if port_match else None))
     return logs
 
-# Parse SSH command log lines
 def parse_ssh_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['ssh_commands']['source'])
@@ -255,7 +264,6 @@ _FTP_CMD_LABELS = {
     'MDTM': 'MDTM',
 }
 
-# Parse FTP honeypot log lines
 def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['ftp']['source'])
@@ -290,7 +298,6 @@ def parse_ftp(logs_dir: str, file_states: Dict) -> List[Dict]:
                 break
     return logs
 
-# Parse HTTP honeypot log lines
 def parse_http(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['http']['source'])
@@ -303,7 +310,6 @@ def parse_http(logs_dir: str, file_states: Dict) -> List[Dict]:
                                      path=match.group(4), user_agent=match.group(6)))
     return logs
 
-# Parse Modbus honeypot log lines
 def parse_modbus(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['modbus']['source'])
@@ -324,7 +330,6 @@ def parse_modbus(logs_dir: str, file_states: Dict) -> List[Dict]:
         logs.append(create_entry('modbus', dt, match.group('ip'), action))
     return logs
 
-# Parse MQTT honeypot log lines
 def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['mqtt']['source'])
@@ -387,7 +392,6 @@ def parse_mqtt(logs_dir: str, file_states: Dict, client_ip_map: Dict[str, str]) 
         i += 1
     return logs
 
-# Parse raw telnet log lines into events
 def _parse_telnet_lines(lines: List[str], pid_to_ip: Dict[str, str],
                         patterns_key: str = 'telnet',
                         cve: Optional[str] = None) -> List[Dict]:
@@ -439,13 +443,11 @@ def _parse_telnet_lines(lines: List[str], pid_to_ip: Dict[str, str],
 
     return logs
 
-# Parse Telnet honeypot log lines
 def parse_telnet(logs_dir: str, file_states: Dict, pid_to_ip: Dict[str, str]) -> List[Dict]:
     source = os.path.join(logs_dir, PATTERNS['telnet']['source'])
     lines = list(read_new_lines(source, file_states))
     return _parse_telnet_lines(lines, pid_to_ip, 'telnet')
 
-# Parse Telnet honeypot log lines
 def parse_telnet_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['telnet_commands']['source'])
@@ -457,13 +459,11 @@ def parse_telnet_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
             logs.append(create_entry('telnet', dt, match.group('ip'), cleaned, user=match.group('user')))
     return logs
 
-# Parse Telnet honeypot log lines
 def parse_telnet_cve(logs_dir: str, file_states: Dict, pid_to_ip: Dict[str, str]) -> List[Dict]:
     source = os.path.join(logs_dir, PATTERNS['telnet_cve_2026_24061']['source'])
     lines = list(read_new_lines(source, file_states))
     return _parse_telnet_lines(lines, pid_to_ip, 'telnet_cve_2026_24061', cve='CVE-2026-24061')
 
-# Parse Telnet honeypot log lines
 def parse_telnet_cve_commands(logs_dir: str, file_states: Dict) -> List[Dict]:
     logs = []
     source = os.path.join(logs_dir, PATTERNS['telnet_cve_2026_24061_commands']['source'])
@@ -488,7 +488,6 @@ MODULE_PARSERS = {
 _NEEDS_PID_MAP = {parse_telnet, parse_telnet_cve}
 _NEEDS_CLIENT_MAP = {parse_mqtt}
 
-# Parse logs from all enabled modules
 def parse_all_modules(logs_dir: str, enabled_modules: Dict[str, str],
                       state: Dict) -> List[Dict]:
     file_states = state.setdefault('files', {})

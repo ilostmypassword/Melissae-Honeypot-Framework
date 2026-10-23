@@ -50,7 +50,7 @@ function compareTimeDesc(a, b) {
 }
 
 // Aggregate alerts by (rule_id, ip).
-function buildGroups(list) {
+export function buildGroups(list) {
   const map = new Map()
   for (const a of list) {
     const key = `${a.rule_id || '_'}|${a.ip || '_'}`
@@ -97,7 +97,7 @@ function buildGroups(list) {
 }
 
 // Aggregate group status: any "new" -> new, else any "acknowledged" -> acknowledged, else resolved
-function groupStatus(g) {
+export function groupStatus(g) {
   if ((g.status_counts.new || 0) > 0) return 'new'
   if ((g.status_counts.acknowledged || 0) > 0) return 'acknowledged'
   return 'resolved'
@@ -198,7 +198,7 @@ function countStats(alerts, groups, counts) {
   }
 }
 
-// Alerts backlog page
+
 export default function Alerts() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -240,7 +240,7 @@ export default function Alerts() {
     return () => clearInterval(t)
   }, [load])
 
-  // Sync filters to URL
+
   useEffect(() => {
     const next = new URLSearchParams()
     if (statusFilter) next.set('status', statusFilter)
@@ -364,7 +364,7 @@ export default function Alerts() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Alerts</h1>
@@ -406,7 +406,7 @@ export default function Alerts() {
         </div>
       )}
 
-      {/* Quick stats */}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Groups" value={stats.groups} />
@@ -416,7 +416,7 @@ export default function Alerts() {
         <Stat label="Critical" value={stats.critical} accent="malicious" />
       </div>
 
-      {/* Filters */}
+
       <div className="glass-card p-4 flex flex-col lg:flex-row lg:items-center gap-3 flex-wrap">
         <FilterPills label="View"     options={VIEW_MODES}        value={viewMode}       onChange={setViewMode} />
         <FilterPills label="Status"   options={STATUS_FILTERS}    value={statusFilter}   onChange={setStatusFilter} />
@@ -436,7 +436,7 @@ export default function Alerts() {
         </div>
       </div>
 
-      {/* Backlog table */}
+
       <div className="glass-card overflow-hidden">
         {stats.total > alerts.length && (
           <div className="px-4 py-2 border-b border-border/50 bg-surface-tertiary/40 text-[11px] text-text-muted font-mono">

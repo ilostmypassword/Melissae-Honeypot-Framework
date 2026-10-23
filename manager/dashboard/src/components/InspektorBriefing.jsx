@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchInspektorReport } from '../api'
+import { fetchInspektorReport, fetchInspektorStatus } from '../api'
 import { useInspektor } from '../context/InspektorContext'
 import { timeAgo } from './InspektorMarkdown'
 import { exportReportToPdf } from '../inspektorPdf'
@@ -44,13 +44,22 @@ function summarize(markdown, max = 220) {
   return ''
 }
 
-// Rich, interactive Inspektor panel for the dashboard home page.
+
 export default function InspektorBriefing() {
   const navigate = useNavigate()
   const { lastMeta, busy, runReport, send } = useInspektor()
   const [fetched, setFetched] = useState(null)
   const [loading, setLoading] = useState(true)
   const [ask, setAsk] = useState('')
+  const [available, setAvailable] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchInspektorStatus()
+      .then(status => { if (!cancelled) setAvailable(Boolean(status?.enabled && status?.configured)) })
+      .catch(() => { if (!cancelled) setAvailable(false) })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -91,11 +100,13 @@ export default function InspektorBriefing() {
 
   const seg = key => (total ? `${((counts[key] || 0) / total) * 100}%` : '0%')
 
+  if (available === false) return null
+
   return (
     <div className="glass-card p-5 relative overflow-hidden group">
       <div className="absolute -top-16 -right-16 w-48 h-48 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Header — clickable to open the chat */}
+
       <button
         onClick={() => navigate('/inspektor')}
         className="flex items-center gap-4 relative w-full text-left"
@@ -131,7 +142,7 @@ export default function InspektorBriefing() {
         </span>
       </button>
 
-      {/* Body */}
+
       <div className="relative mt-4">
         {loading ? (
           <div className="space-y-2">
@@ -141,7 +152,7 @@ export default function InspektorBriefing() {
           </div>
         ) : report ? (
           <>
-            {/* Verdict breakdown bar */}
+
             {total > 0 && (
               <div className="mb-3">
                 <div className="flex h-2 rounded-full overflow-hidden bg-surface-tertiary">
@@ -158,14 +169,14 @@ export default function InspektorBriefing() {
               </div>
             )}
 
-            {/* Briefing summary preview */}
+
             {summary && (
               <p className="text-[12.5px] leading-relaxed text-text-secondary line-clamp-3">
                 {summary}
               </p>
             )}
 
-            {/* Actions */}
+
             <div className="flex items-center gap-2 mt-3.5">
               <button
                 onClick={onGenerate}
@@ -201,7 +212,7 @@ export default function InspektorBriefing() {
           </div>
         )}
 
-        {/* Quick-ask composer */}
+
         <form onSubmit={onAsk} className="mt-4 flex items-center gap-2">
           <input
             value={ask}

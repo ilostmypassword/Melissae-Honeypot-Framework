@@ -26,7 +26,10 @@ logging.basicConfig(
 )
 log = logging.getLogger('melissae-agent')
 
-# Load agent configuration from YAML
+# Max batches drained per push cycle: 20 × 500 logs / 10s interval ≈ 1000 logs/s
+# sustained, while still yielding regularly to parsing and health reporting.
+MAX_BATCHES_PER_CYCLE = 20
+
 def load_config(path: str) -> dict:
     with open(path, 'r') as f:
         return yaml.safe_load(f)
@@ -48,7 +51,6 @@ def writable_file_path(path_value: str, fallback_path: str, base_dir: Path) -> s
         log.warning(f"Cannot write to '{resolved}', falling back to '{fallback}'")
         return fallback
 
-# SQLite-based log buffer with size management
 class LogBuffer:
     def __init__(self, db_path: str, max_size_mb: int = 512):
         self.db_path = db_path
@@ -67,6 +69,16 @@ class LogBuffer:
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )
             ''')
+        # Without auto_vacuum the file never shrinks after deletes, so a single
+        # backlog spike would keep the size-based pruning below firing forever
+        # and silently destroy fresh logs. One-time VACUUM applies the pragma
+        # to pre-existing databases.
+        try:
+            if self.conn.execute('PRAGMA auto_vacuum').fetchone()[0] != 1:
+                self.conn.execute('PRAGMA auto_vacuum = FULL')
+                self.conn.execute('VACUUM')
+        except sqlite3.Error as e:
+            print(f"[buffer] auto_vacuum setup failed: {e}")
 
     def insert(self, logs: list):
         if not logs:
@@ -110,16 +122,17 @@ class LogBuffer:
         try:
             size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
             if size_mb > self.max_size_mb:
-                log.warning(f"Buffer size {size_mb:.1f}MB exceeds limit {self.max_size_mb}MB — pruning oldest entries")
+                log.warning(f"Buffer size {size_mb:.1f}MB exceeds limit {self.max_size_mb}MB — pruning oldest 10%")
                 with self.lock:
                     with self.conn:
                         self.conn.execute(
-                            'DELETE FROM pending_logs WHERE id IN (SELECT id FROM pending_logs ORDER BY id LIMIT 1000)'
+                            'DELETE FROM pending_logs WHERE id IN '
+                            '(SELECT id FROM pending_logs ORDER BY id '
+                            ' LIMIT (SELECT COUNT(*) / 10 + 1 FROM pending_logs))'
                         )
-        except OSError:
+        except (OSError, sqlite3.Error):
             pass
 
-# mTLS client for pushing logs to the manager
 class PushClient:
     def __init__(self, config: dict):
         mgr = config['manager']
@@ -141,7 +154,6 @@ class PushClient:
         resp.raise_for_status()
         return resp.json()
 
-# HTTPS handler for health checks and remote commands
 class HealthHandler(BaseHTTPRequestHandler):
     agent_state = {}
     compose_cmd = None
@@ -286,7 +298,7 @@ class HealthHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
-# Start the mTLS health and command server
+
 def start_health_server(config: dict, agent_state: dict):
     agent_cfg = config['agent']
     mgr_cfg = config['manager']
@@ -326,7 +338,6 @@ def start_health_server(config: dict, agent_state: dict):
     log.info(f"Health endpoint listening on :{port} (mTLS)")
     return server
 
-# Get the status of all Docker containers
 def get_container_statuses() -> list:
     try:
         out = subprocess.check_output(
@@ -348,7 +359,6 @@ def get_container_statuses() -> list:
     except Exception:
         return []
 
-# Entry point — start all daemon threads and the log tailer
 def main():
     if len(sys.argv) < 3 or sys.argv[1] != '--config':
         print(f"Usage: {sys.argv[0]} --config <config.yml>")
@@ -428,16 +438,25 @@ def main():
             log.error(f"Parse error: {e}")
 
         try:
-            batch = buffer.fetch_batch(batch_size)
-            if batch:
+            # Drain the buffer instead of sending a single batch per cycle:
+            # one batch per interval caps throughput at batch_size/interval
+            # logs/s and lets the backlog grow without bound under load.
+            pushed_logs = 0
+            for _ in range(MAX_BATCHES_PER_CYCLE):
+                batch = buffer.fetch_batch(batch_size)
+                if not batch:
+                    break
                 result = push_client.push_batch(batch)
-                ids = [row[0] for row in batch]
-                buffer.delete_ids(ids)
+                buffer.delete_ids([row[0] for row in batch])
+                pushed_logs += len(batch)
                 last_push_time = datetime.now(timezone.utc).isoformat()
                 last_push_status = 'success'
                 retry_delay = push_interval
-                log.info(f"Pushed {result.get('ingested', len(batch))} logs "
-                         f"({result.get('duplicates', 0)} duplicates)")
+                if len(batch) < batch_size:
+                    break
+            if pushed_logs:
+                log.info(f"Pushed {pushed_logs} logs "
+                         f"(buffer backlog: {buffer.pending_count()})")
         except requests.RequestException as e:
             last_push_status = 'failed'
             retry_delay = min(retry_delay * 2, retry_max)

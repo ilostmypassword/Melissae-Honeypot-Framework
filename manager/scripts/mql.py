@@ -5,6 +5,7 @@ _FIELD_GETTERS = {
     "protocol":   lambda log: log.get("protocol", ""),
     "action":     lambda log: log.get("action", ""),
     "ip":         lambda log: log.get("ip", ""),
+    "port":       lambda log: log.get("port", ""),
     "date":       lambda log: log.get("date", ""),
     "user":       lambda log: log.get("user", ""),
     "user-agent": lambda log: log.get("user-agent", ""),
@@ -32,7 +33,6 @@ def _unquote(s: str) -> str:
 _FIELD_TERM_RE = re.compile(r'^([A-Za-z_][\w-]*):(.*)$', re.DOTALL)
 
 
-# Match a single field:value or bareword term
 def _match_simple_term(log: Dict, term: str) -> bool:
     term = term.strip()
     if not term:
@@ -57,7 +57,6 @@ def _match_simple_term(log: Dict, term: str) -> bool:
     return any(needle in str(v or "").lower() for v in log.values())
 
 
-# Tokenizer
 _TOKEN_RE = re.compile(
     r'\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s():"]+:"[^"]*"|"[^"]*"|[^\s()]+',
     re.IGNORECASE,
@@ -147,7 +146,6 @@ def _eval(node: Tuple, log: Dict) -> bool:
     return False
 
 
-# Return True if a single log entry satisfies the MQL query
 def match_log(log: Dict, query: str) -> bool:
     if not query or not query.strip():
         return True
@@ -159,7 +157,6 @@ def match_log(log: Dict, query: str) -> bool:
     return _eval(tree, log)
 
 
-# Return logs matching the MQL query
 def filter_logs(logs: Iterable[Dict], query: str) -> List[Dict]:
     if not query or not query.strip():
         return list(logs)

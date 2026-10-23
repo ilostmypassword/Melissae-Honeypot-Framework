@@ -37,7 +37,7 @@ const ZOOM_MAX = 2.5
 const ZOOM_STEP = 1.2
 const FIT_PADDING = 60
 
-// Map an arbitrary container/log name to its canonical protocol bucket.
+
 function moduleProtocol(name) {
   const n = String(name || '').toLowerCase()
   if (n.includes('cve'))    return 'telnet'
@@ -61,7 +61,7 @@ function truncate(str, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-// Aggregate the agent's modules into one entry per protocol.
+
 function agentProtocols(agent) {
   const map = new Map()
   for (const m of agent.last_health?.modules || []) {
@@ -76,7 +76,7 @@ function agentProtocols(agent) {
   return [...map.values()].sort((a, b) => a.protocol.localeCompare(b.protocol))
 }
 
-// Vertical-leaning Bezier curve for connection paths.
+
 function curvePath(p1, p2) {
   const dy = (p2.y - p1.y) / 2
   return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + dy}, ${p2.x} ${p2.y - dy}, ${p2.x} ${p2.y}`
@@ -95,7 +95,7 @@ function saveJSON(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
 }
 
-// Build the node graph keyed by id.
+
 function buildGraph(agents) {
   const graph = {
     'manager': { id: 'manager', kind: 'manager', parent: null, dims: NODE_DIMS.manager },
@@ -498,7 +498,7 @@ export default function AgentTopology({ agents = [], logs = [], onModuleClick })
     timersRef.current.clear()
   }, [])
 
-  // Flash a module node and animate a packet along the agent → module edge.
+
   function triggerFlash(log) {
     const proto = moduleProtocol(String(log.protocol || ''))
     if (!proto) return

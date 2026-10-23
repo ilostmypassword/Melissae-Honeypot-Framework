@@ -28,7 +28,7 @@ ChartJS.register(
   LineElement, BarElement, ArcElement, Tooltip, Legend, Filler
 )
 
-// Root application component with routing
+
 export default function App() {
   return (
     <InspektorProvider>

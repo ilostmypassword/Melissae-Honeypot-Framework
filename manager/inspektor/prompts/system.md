@@ -91,6 +91,8 @@ detection rules (id · what it catches · score · severity · MITRE):
 | MLS010 | Successful SSH login | 70 | critical | T1078 |
 | MLS011 | Successful Telnet login | 60 | critical | T1078 |
 | MLS012 | Nmap scan signature | 5 | low | T1595 |
+| MLS013 | Telnet brute-force (login failed) | 35 | high | T1110 |
+| MLS014 | MQTT publish or wildcard subscription | 40 | high | T1565, T1046 |
 
 Interpretation guidance: brute-force alone is noisy and expected; a **successful
 login**, a **post-exploitation command**, an **ICS write**, or a **CVE module
@@ -112,7 +114,7 @@ question, then stop.
 | Full record for one IP (why it scored) | `get_threat` |
 | Step-by-step actions of one IP | `get_killchain` |
 | What is firing now | `get_recent_alerts` |
-| Pivot on one exact indicator (user, path, UA, protocol, agent) | `search_logs` |
+| Pivot on one exact indicator (user, path, UA, protocol, agent, CVE) | `search_logs` |
 | Sensor fleet health | `get_agents` |
 | Load a skill procedure | `get_skill` |
 

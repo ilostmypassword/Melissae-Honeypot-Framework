@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-surface text-text-primary font-sans antialiased;
     min-height: 100vh;
@@ -67,6 +71,35 @@
     @apply rounded-lg animate-shimmer;
     background: linear-gradient(90deg, #151d27 25%, #202936 50%, #151d27 75%);
     background-size: 200% 100%;
+  }
+}
+
+/* Native View Transitions (progressive enhancement, used by route navigation).
+   The sidebar keeps its own layer so only the page content cross-fades. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
+::view-transition-group(melissae-sidebar) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 

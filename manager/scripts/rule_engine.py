@@ -43,7 +43,6 @@ def parse_lookback(value: str) -> timedelta:
     }[unit]
 
 
-# Expand a single cron field into the set of matching integers
 def _expand_cron_field(field: str, lo: int, hi: int) -> set:
     result: set = set()
     for piece in field.split(","):
@@ -231,7 +230,10 @@ def _log_unique_id(log: Dict) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-# Fetch logs newer than (now - lookback). Uses date+hour fallback
+# Fetch logs newer than (now - lookback), by event time OR arrival time: a log
+# that reaches the manager after an agent backlog has an old event timestamp
+# but must still get one evaluation pass (alert ids make re-evaluation
+# idempotent). Uses date+hour fallback.
 def _fetch_logs(db, lookback: timedelta) -> List[Dict]:
     cutoff_dt = datetime.now(timezone.utc) - lookback
     cutoff_iso = _format_utc_iso(cutoff_dt)
@@ -239,11 +241,24 @@ def _fetch_logs(db, lookback: timedelta) -> List[Dict]:
     query = {
         "$or": [
             {"timestamp": {"$gte": cutoff_iso}},
+            {"ingested_at": {"$gte": cutoff_iso}},
             {"date": {"$gte": cutoff_date}},
         ]
     }
-    logs = list(db["logs"].find(query, {}).limit(50000))
-    return [log for log in logs if (dt := _parse_log_datetime(log)) and dt >= cutoff_dt]
+    # Sort newest-first before applying the cap: without it Mongo returns an
+    # arbitrary (oldest-first) subset once the day exceeds the limit, and the
+    # logs inside the actual lookback window never reach the rules
+    logs = list(db["logs"].find(query, {}).sort("timestamp", -1).limit(50000))
+    out = []
+    for log in logs:
+        dt = _parse_log_datetime(log)
+        if dt and dt >= cutoff_dt:
+            out.append(log)
+            continue
+        ingested = log.get("ingested_at")
+        if isinstance(ingested, str) and ingested >= cutoff_iso:
+            out.append(log)
+    return out
 
 
 # Run a single rule against the DB; returns (alerts_emitted, groups_triggered)
@@ -260,8 +275,10 @@ def execute_rule(rule: Dict, db, now: datetime) -> Tuple[int, int]:
             if match_log(log, rule["mql"]):
                 matched.append(log)
         except Exception as e:
-            print(f"[rule_engine] {rule['id']}: MQL eval error: {e}")
-            return (0, 0)
+            # Skip the offending log; aborting here would let a single
+            # malformed document silence the whole rule
+            print(f"[rule_engine] {rule['id']}: MQL eval error on log "
+                  f"{log.get('_id', '?')}: {e}")
 
     if not matched:
         return (0, 0)
@@ -390,6 +407,7 @@ def run_due_rules(now: Optional[datetime] = None,
 def _ensure_indexes(db) -> None:
     try:
         db["logs"].create_index([("timestamp", -1)])
+        db["logs"].create_index([("ingested_at", -1)])
         db["logs"].create_index([("agent_id", 1), ("timestamp", -1)])
         db["logs"].create_index("protocol")
         db["logs"].create_index("ip")

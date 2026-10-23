@@ -54,7 +54,7 @@ export const mdComponents = {
   ),
 }
 
-// Compact "x min ago" formatter for an ISO timestamp
+
 export function timeAgo(iso) {
   if (!iso) return null
   const then = new Date(iso).getTime()

@@ -90,7 +90,7 @@ export default function Map() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Summary bar */}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="glass-card p-4">
           <p className="section-title">Total IPs</p>
@@ -106,7 +106,7 @@ export default function Map() {
         </div>
       </div>
 
-      {/* World map — external threats */}
+
       {hasExternal && (
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
@@ -123,7 +123,7 @@ export default function Map() {
         </div>
       )}
 
-      {/* Internal network threats */}
+
       {hasInternal && (
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
@@ -184,7 +184,7 @@ export default function Map() {
         </div>
       )}
 
-      {/* Country breakdown table */}
+
       {countryStats.length > 0 && (
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Top Attack Origins by Country</h3>
@@ -218,7 +218,7 @@ export default function Map() {
         </div>
       )}
 
-      {/* Recent geolocated threats */}
+
       {geoThreats.length > 0 && (
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Geolocated Threats</h3>

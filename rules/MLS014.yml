@@ -1,0 +1,16 @@
+id: MLS014
+name: MQTT publish or wildcard subscription
+description: >
+  A client published a message to the MQTT honeypot broker, or subscribed
+  to a wildcard topic ("#"). Publishing is message tampering; wildcard
+  subscriptions are broker-wide enumeration of every topic.
+severity: high
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 1m
+mql: 'protocol:mqtt AND (action:Publish OR action:#)'
+group_by: ip
+threshold: 1
+score: 40
+tags: [iot, tampering, discovery]
+mitre: [T1565, T1046]

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchLogs, fetchGeoIP } from '../api'
+import { fetchAllLogs, fetchGeoIP } from '../api'
 import StatCard from '../components/StatCard'
 import { ProtocolChart, TopAttackersList, TopCredentials, TopHTTPTable } from '../components/charts'
 import { filterByDateRange, computeStats, formatNumber } from '../utils'
@@ -12,7 +12,7 @@ const DATE_RANGES = [
   { label: 'All', value: 'all' },
 ]
 
-// Attacker statistics: security events, protocol breakdown, top IPs, credentials
+
 export default function AttackerStats() {
   const [logs, setLogs] = useState([])
   const [geoData, setGeoData] = useState({})
@@ -23,7 +23,7 @@ export default function AttackerStats() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetchLogs()
+    fetchAllLogs()
       .then(data => {
         setLogs(data)
         const uniqueIPs = [...new Set(data.map(l => l.ip).filter(Boolean))]
@@ -53,7 +53,7 @@ export default function AttackerStats() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Threats</h1>
@@ -85,7 +85,7 @@ export default function AttackerStats() {
         <span className="text-[10px] text-text-muted font-mono">{formatNumber(s.uniqueIPs)} unique IPs</span>
       </div>
 
-      {/* Security events summary */}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard value={s.uniqueIPs} label="Unique IPs" />
         <StatCard value={s.cveLogs} label="CVE Exploits" variant={s.cveLogs > 0 ? 'alert' : 'default'} onClick={s.cveLogs > 0 ? () => goSearch('cve:CVE') : undefined} />
@@ -94,7 +94,7 @@ export default function AttackerStats() {
         <StatCard value={s.modbusWrites} label="Modbus Writes" variant={s.modbusWrites > 0 ? 'warning' : 'default'} onClick={s.modbusWrites > 0 ? () => goSearch('action:write AND protocol:modbus') : undefined} />
       </div>
 
-      {/* Protocol breakdown + Top Attackers */}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="glass-card p-5">
           <h3 className="section-title mb-4">Protocol Distribution</h3>
@@ -108,13 +108,13 @@ export default function AttackerStats() {
         </div>
       </div>
 
-      {/* Top Credentials */}
+
       <div className="glass-card p-5">
         <h3 className="section-title mb-4">Top Attempted Credentials</h3>
         <TopCredentials logs={filteredLogs} limit={20} />
       </div>
 
-      {/* HTTP Analysis */}
+
       {s.protocols.http > 0 && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-widest">HTTP Analysis</h2>

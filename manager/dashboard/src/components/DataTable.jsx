@@ -4,7 +4,7 @@ import { formatNumber, logTimestampToMs, timestampToMs } from '../utils'
 const PAGE_SIZES = [25, 50, 100, 250]
 const TIME_KEYS = new Set(['timestamp', 'created_at', 'updated_at', 'first_seen', 'last_seen', 'last_push', 'last_check'])
 
-// Sortable, paginated data table component
+
 export default function DataTable({
   columns,
   data,
@@ -114,7 +114,7 @@ export default function DataTable({
         </table>
       </div>
 
-      {/* Pagination controls */}
+
       {paginate && data.length > PAGE_SIZES[0] && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 text-sm text-text-secondary">
           <div className="flex items-center gap-2">

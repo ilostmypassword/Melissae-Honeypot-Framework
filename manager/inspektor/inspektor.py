@@ -55,10 +55,6 @@ DEFAULT_CONFIG: Dict = {
 }
 
 
-# --------------------------------------------------------------------------- #
-# Configuration
-# --------------------------------------------------------------------------- #
-
 def _deep_merge(base: Dict, override: Dict) -> Dict:
     out = dict(base)
     for key, val in (override or {}).items():
@@ -90,10 +86,6 @@ def load_config(path: str) -> Dict:
     return cfg
 
 
-# --------------------------------------------------------------------------- #
-# Prompt assembly from Markdown
-# --------------------------------------------------------------------------- #
-
 def build_system_prompt() -> str:
     system = (BASE_DIR / "prompts" / "system.md").read_text(encoding="utf-8")
     index = tools.skills_index()
@@ -101,10 +93,6 @@ def build_system_prompt() -> str:
         return system.replace("{{skills}}", index)
     return f"{system.rstrip()}\n\n{index}"
 
-
-# --------------------------------------------------------------------------- #
-# Agent
-# --------------------------------------------------------------------------- #
 
 def build_agent(cfg: Dict) -> AgentExecutor:
     client = boto3.client("bedrock-runtime", region_name=cfg["bedrock"]["region"])
@@ -131,10 +119,6 @@ def build_agent(cfg: Dict) -> AgentExecutor:
         return_intermediate_steps=True,
     )
 
-
-# --------------------------------------------------------------------------- #
-# Reporting
-# --------------------------------------------------------------------------- #
 
 def _format_utc_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -217,14 +201,10 @@ def _trace_from_steps(result) -> List[Dict]:
     return trace
 
 
-# --------------------------------------------------------------------------- #
-# Runtime state
-# --------------------------------------------------------------------------- #
-
 app = Flask("inspektor")
 
 _LOCK = threading.Lock()   # serialize LLM calls (one Bedrock conversation at a time)
-_STATE: Dict = {"cfg": None, "agent": None, "db": None, "ready": False}
+_STATE: Dict = {"cfg": None, "agent": None, "db": None, "ready": False, "configured": False}
 
 
 def _history_to_messages(history) -> List:
@@ -266,13 +246,12 @@ def generate_report() -> Dict:
     return report
 
 
-# --------------------------------------------------------------------------- #
-# HTTP API
-# --------------------------------------------------------------------------- #
-
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok" if _STATE["ready"] else "starting"})
+    return jsonify({
+        "status": "ok" if _STATE["ready"] else "starting",
+        "configured": bool(_STATE.get("configured")),
+    })
 
 
 @app.post("/report")
@@ -308,15 +287,12 @@ def http_chat():
         return jsonify({"error": "Inspektor could not process this request"}), 502
 
 
-# --------------------------------------------------------------------------- #
-# Startup
-# --------------------------------------------------------------------------- #
-
 def init() -> None:
     cfg = load_config(os.getenv("INSPEKTOR_CONFIG", str(BASE_DIR / "config.yml")))
     tools.KILLCHAIN_LIMIT = int(cfg["inspektor"].get("killchain_limit", 200))
 
-    if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY")):
+    _STATE["configured"] = bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
+    if not _STATE["configured"]:
         log.warning(
             "AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are not set — "
             "Bedrock calls will fail until credentials are provided."

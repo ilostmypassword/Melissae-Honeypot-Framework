@@ -13,10 +13,10 @@ what activity exists **beyond the tracked threats**.
    enumerate activity that never entered `threats`.
 2. For a targeted pivot, map the request to one searchable field. `search_logs`
    matches **one exact field/value** at a time; allowed fields are: `ip`,
-   `protocol`, `action`, `path`, `user`, `user-agent`, `agent_id`.
+   `protocol`, `action`, `path`, `user`, `user-agent`, `agent_id`, `cve`.
 3. Call `search_logs` with that field/value and a `limit` (default 25, max 100).
    Matches return newest-first with timestamp, ip, protocol, action, path, user,
-   user-agent, agent_id.
+   user-agent, agent_id, cve.
 4. Aggregate the result yourself: count distinct source IPs, time span, and which
    agents saw it. Identify whether it is one actor or a broad campaign.
 5. Escalate the most relevant IP(s): `get_threat` for their score/verdict (note if

@@ -2,12 +2,12 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from pymongo import MongoClient, UpdateOne
 from pymongo.errors import PyMongoError
+import base64
 import hashlib
 import ipaddress
 import json
 import os
 import re
-import secrets
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
@@ -26,7 +26,7 @@ MAX_RESULTS_THREATS = 2000
 
 REQUIRED_LOG_FIELDS = {"protocol", "ip", "action"}
 
-MAX_FIELD_LEN = 512
+MAX_FIELD_LEN = 4096
 
 _mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000, maxPoolSize=50)
 
@@ -43,7 +43,7 @@ def _sanitize_str(val, max_len=MAX_FIELD_LEN):
     return cleaned[:max_len]
 
 def _compute_uid(log):
-    key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'action', 'path', 'user', 'user-agent']
+    key_fields = ['protocol', 'timestamp', 'date', 'hour', 'ip', 'port', 'action', 'path', 'user', 'user-agent']
     payload = {k: log.get(k) for k in key_fields if k in log}
     serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
@@ -153,7 +153,6 @@ def _build_log_stats_query(args):
     return query
 
 @app.route("/api/logs", methods=["GET"])
-# GET /api/logs — Paginated log retrieval with filters
 def api_logs():
     try:
         db = get_db()
@@ -184,7 +183,6 @@ def api_logs():
         return jsonify({"error": "Database error"}), 500
 
 @app.route("/api/logs/stats", methods=["GET"])
-# GET /api/logs/stats — Server-side counters for large log volumes
 def api_logs_stats():
     try:
         db = get_db()
@@ -254,8 +252,43 @@ def api_logs_stats():
     except PyMongoError:
         return jsonify({"error": "Database error"}), 500
 
+@app.route("/api/logs/timeline", methods=["GET"])
+# Buckets cover ALL logs so dashboard charts reflect the full history, not the newest 5000 events
+def api_logs_timeline():
+    try:
+        db = get_db()
+        query = _build_log_stats_query(request.args)
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": {
+                    "date": "$date",
+                    "hour": {"$substrBytes": [{"$ifNull": ["$hour", "00"]}, 0, 2]},
+                    "protocol": {"$ifNull": ["$protocol", "other"]},
+                    "agent_id": {"$ifNull": ["$agent_id", ""]},
+                },
+                "count": {"$sum": 1},
+            }},
+        ]
+        buckets = []
+        for row in db["logs"].aggregate(pipeline, allowDiskUse=True):
+            key = row.get("_id") or {}
+            date = key.get("date")
+            if not isinstance(date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                continue
+            hour2 = str(key.get("hour") or "00")[:2]
+            buckets.append({
+                "date": date,
+                "hour": f"{hour2}:00:00",
+                "protocol": key.get("protocol") or "other",
+                "agent_id": key.get("agent_id") or None,
+                "count": int(row.get("count", 0)),
+            })
+        return jsonify({"buckets": buckets})
+    except PyMongoError:
+        return jsonify({"error": "Database error"}), 500
+
 @app.route("/api/inspektor/report", methods=["GET"])
-# GET /api/inspektor/report — Latest AI threat briefing by Inspektor
 def api_inspektor_report():
     try:
         db = get_db()
@@ -271,7 +304,6 @@ def api_inspektor_report():
         })
     return jsonify(doc)
 
-# Proxy a JSON request to the optional Inspektor container and relay its reply
 def _proxy_inspektor(path, payload, timeout):
     url = f"{INSPEKTOR_URL.rstrip('/')}{path}"
     data = json.dumps(payload or {}).encode("utf-8")
@@ -293,15 +325,30 @@ def _proxy_inspektor(path, payload, timeout):
     except Exception:
         return jsonify({"error": "Inspektor request failed"}), 502
 
+@app.route("/api/inspektor/status", methods=["GET"])
+def api_inspektor_status():
+    url = f"{INSPEKTOR_URL.rstrip('/')}/health"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            return jsonify({
+                "enabled": True,
+                "ready": body.get("status") == "ok",
+                "configured": bool(body.get("configured")),
+            })
+    except Exception:
+        return jsonify({"enabled": False, "ready": False, "configured": False})
+
 @app.route("/api/inspektor/generate", methods=["POST"])
-# POST /api/inspektor/generate — Trigger a fresh on-demand threat briefing
 def api_inspektor_generate():
     return _proxy_inspektor("/report", {}, timeout=180)
 
 @app.route("/api/inspektor/chat", methods=["POST"])
-# POST /api/inspektor/chat — Conversational turn with Inspektor
 def api_inspektor_chat():
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
     message = _sanitize_str(payload.get("message", ""), 4000)
     if not message.strip():
         return jsonify({"error": "message is required"}), 400
@@ -320,7 +367,6 @@ def api_inspektor_chat():
     return _proxy_inspektor("/chat", {"message": message, "history": safe_history}, timeout=120)
 
 @app.route("/api/threats", methods=["GET"])
-# GET /api/threats — Threat list with pagination and sorting
 def api_threats():
     try:
         db = get_db()
@@ -339,7 +385,6 @@ def api_threats():
         return jsonify({"error": "Database error"}), 500
 
 @app.route("/api/threats/<ip>/killchain", methods=["GET"])
-# GET /api/threats/<ip>/killchain — Attack timeline for an IP
 def api_killchain(ip):
     try:
         ipaddress.ip_address(ip)
@@ -352,7 +397,7 @@ def api_killchain(ip):
             db["logs"]
             .find({"ip": ip}, {"_id": 0})
             .sort("timestamp", -1)
-            .limit(5000)
+            .limit(20000)
         )
 
         events = []
@@ -378,7 +423,6 @@ def api_killchain(ip):
         return jsonify({"error": "Database error"}), 500
 
 @app.route("/api/ingest", methods=["POST"])
-# POST /api/ingest — Receive and deduplicate logs from agents
 def api_ingest():
     client_cn = request.headers.get("X-SSL-Client-CN", "")
     if not client_cn:
@@ -413,6 +457,7 @@ def api_ingest():
         bulk_ops = []
         seen = set()
         duplicates = 0
+        ingested_at = _format_utc_iso(datetime.now(timezone.utc))
 
         for entry in batch:
             if not isinstance(entry, dict):
@@ -432,6 +477,9 @@ def api_ingest():
                 continue
 
             sanitized["agent_id"] = _sanitize_str(agent_id, 64)
+            # Arrival time, distinct from the event timestamp: the rule engine
+            # uses it to evaluate logs that reach the manager after a backlog
+            sanitized["ingested_at"] = ingested_at
 
             uid = entry.get("hash") or _compute_uid(sanitized)
             if uid in seen:
@@ -463,15 +511,16 @@ def api_ingest():
         return jsonify({"error": "Ingestion failed"}), 503
 
 @app.route("/api/geoip", methods=["POST"])
-# POST /api/geoip — Batch geolocate IPs via ip-api.com
 def api_geoip():
     data = request.get_json(silent=True)
-    if not data or not isinstance(data.get("ips"), list):
+    if not isinstance(data, dict) or not isinstance(data.get("ips"), list):
         return jsonify({"error": "Expected {ips: [...]}"}), 400
 
     raw_ips = data["ips"][:100]
     ips = []
     for ip in raw_ips:
+        if not isinstance(ip, str):
+            continue
         try:
             addr = ipaddress.ip_address(ip)
             if (not addr.is_private and not addr.is_loopback
@@ -530,7 +579,6 @@ def api_geoip():
     return jsonify(result)
 
 @app.route("/api/geoip/<ip>", methods=["GET"])
-# GET /api/geoip/<ip> — Detailed geolocation for a single public IP
 def api_geoip_details(ip):
     try:
         addr = ipaddress.ip_address(ip)
@@ -588,16 +636,17 @@ def api_geoip_details(ip):
         return jsonify({"error": "Database error"}), 500
 
 @app.route("/api/enroll", methods=["POST"])
-# POST /api/enroll — Agent enrollment with one-time token
 def api_enroll():
     data = request.get_json(silent=True)
-    if not data:
+    if not isinstance(data, dict):
         return jsonify({"error": "Invalid JSON body"}), 400
 
     token = data.get("token", "")
 
-    if not token:
+    if not isinstance(token, str) or not token:
         return jsonify({"error": "Missing token"}), 400
+    if not re.fullmatch(r"[A-Fa-f0-9]{64}", token):
+        return jsonify({"error": "Invalid or expired token"}), 403
 
     try:
         db = get_db()
@@ -612,6 +661,8 @@ def api_enroll():
             return jsonify({"error": "Invalid or expired token"}), 403
 
         agent_id = doc.get("agent_id", "")
+        if not isinstance(agent_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", agent_id):
+            return jsonify({"error": "Invalid agent id"}), 500
 
         cert_dir = doc.get("cert_dir", "")
         pki_base = os.path.abspath(os.getenv("MELISSAE_CERTS_DIR", "/certs"))
@@ -621,7 +672,6 @@ def api_enroll():
         if not cert_dir or not os.path.isdir(cert_dir):
             return jsonify({"error": "Certificate bundle not found — re-run enroll on manager"}), 500
 
-        import base64
         cert_files = {
             "agent_crt": os.path.join(cert_dir, f"{agent_id}.crt"),
             "agent_key": os.path.join(cert_dir, f"{agent_id}.key"),
@@ -650,7 +700,6 @@ def api_enroll():
         return jsonify({"error": "Enrollment failed"}), 500
 
 @app.route("/api/agents", methods=["GET"])
-# GET /api/agents — List registered agents
 def api_agents():
     try:
         db = get_db()
@@ -667,7 +716,6 @@ RULES_DIR = os.getenv("MELISSAE_RULES_DIR", "/rules")
 
 
 @app.route("/api/alerts", methods=["GET"])
-# GET /api/alerts — Paginated alerts backlog with filters
 def api_alerts():
     try:
         db = get_db()
@@ -689,7 +737,6 @@ def api_alerts():
 
 
 @app.route("/api/alerts/count", methods=["GET"])
-# GET /api/alerts/count — Counts grouped by status (for navbar badge)
 def api_alerts_count():
     try:
         db = get_db()
@@ -747,12 +794,13 @@ def api_alerts_count():
 
 
 @app.route("/api/alerts/<alert_id>/status", methods=["POST", "PATCH"])
-# POST /api/alerts/<id>/status — Update an alert's lifecycle status
 def api_alerts_set_status(alert_id):
     if not re.match(r"^[a-f0-9]{32,128}$", alert_id):
         return jsonify({"error": "Invalid alert id"}), 400
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
     new_status = str(data.get("status", "")).lower().strip()
     if new_status not in VALID_ALERT_STATUSES:
         return jsonify({"error": "Invalid status"}), 400
@@ -774,9 +822,10 @@ def api_alerts_set_status(alert_id):
 
 
 @app.route("/api/alerts/bulk-status", methods=["POST"])
-# POST /api/alerts/bulk-status — Update many alerts at once
 def api_alerts_bulk_status():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
     ids = data.get("ids") or []
     new_status = str(data.get("status", "")).lower().strip()
     if not isinstance(ids, list) or not ids:
@@ -805,7 +854,6 @@ def api_alerts_bulk_status():
 
 
 @app.route("/api/rules", methods=["GET"])
-# GET /api/rules — List rules with last-run metadata
 def api_rules():
     rules = []
     try:

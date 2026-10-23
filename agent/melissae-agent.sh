@@ -33,7 +33,6 @@ warn()    { echo -e "${YELLOW}[!]${RESET} $1"; }
 error()   { echo -e "${RED}[✗]${RESET} $1"; }
 debug()   { echo -e "${GRAY}[~]${RESET} $1"; }
 
-# Display the ASCII art banner
 print_banner() {
     clear
     echo -e "${CYAN}"
@@ -56,7 +55,6 @@ EOF
     echo
 }
 
-# Detect and set the docker compose command
 ensure_compose_cmd() {
     if [ ${#compose_cmd[@]} -gt 0 ]; then return 0; fi
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -69,7 +67,6 @@ ensure_compose_cmd() {
     fi
 }
 
-# Count running agent containers
 get_running_count() {
     ensure_compose_cmd 2>/dev/null || { echo "0"; return; }
     local count
@@ -85,7 +82,6 @@ get_agent_id() {
     fi
 }
 
-# Build the interactive shell prompt
 get_prompt() {
     local running_count agent_id
     running_count=$(get_running_count 2>/dev/null || echo "?")
@@ -103,7 +99,6 @@ MODULE_REGISTRY=(
     "cve-2026-24061|melissae_cve_2026_24061|23|CVE-2026-24061 Telnet Auth Bypass"
 )
 
-# Get a field value from a module registry entry
 _mod_field() {
     local name="$1" idx="$2"
     for entry in "${MODULE_REGISTRY[@]}"; do
@@ -118,7 +113,6 @@ _mod_field() {
     return 1
 }
 
-# Check if a module is enabled in config
 _mod_enabled() {
     local name="$1"
     if [ ! -f "$CONFIG_FILE" ]; then return 1; fi
@@ -128,14 +122,12 @@ _mod_enabled() {
     ' "$CONFIG_FILE" | grep -qi "true"
 }
 
-# Check if a module container is running
 _mod_running() {
     local service="$1"
     ensure_compose_cmd 2>/dev/null || return 1
     "${compose_cmd[@]}" ps --format '{{.Service}}' 2>/dev/null | grep -qx "$service"
 }
 
-# Detect port conflicts between modules
 _detect_conflicts() {
     local -A port_map
     local conflicts=()
@@ -162,7 +154,6 @@ _detect_conflicts() {
     return 0
 }
 
-# Display available commands and usage
 cmd_help() {
     echo
     echo -e "${BOLD}${WHITE}CORE COMMANDS${RESET}"
@@ -195,7 +186,6 @@ cmd_help() {
     echo
 }
 
-# Install and enroll the agent with the manager
 cmd_install() {
     if [ $# -lt 2 ]; then
         warn "Usage: install <manager-url> <enrollment-token>"
@@ -270,9 +260,9 @@ cmd_install() {
         return 1
     fi
 
+    (umask 077; echo "$body" | jq -r '.agent_key' 2>/dev/null | base64 -d > "$CERTS_DIR/agent.key")
     echo "$body" | jq -r '.ca_crt' 2>/dev/null | base64 -d > "$CERTS_DIR/ca.crt"
     echo "$body" | jq -r '.agent_crt' 2>/dev/null | base64 -d > "$CERTS_DIR/agent.crt"
-    echo "$body" | jq -r '.agent_key' 2>/dev/null | base64 -d > "$CERTS_DIR/agent.key"
     chmod 600 "$CERTS_DIR/agent.key"
 
     if ! openssl x509 -in "$CERTS_DIR/agent.crt" -noout 2>/dev/null; then
@@ -321,7 +311,7 @@ modules:
     log_path: "ftp/vsftpd.log"
   http:
     enabled: true
-    log_path: "http/access.log"
+    log_path: "web/access.log"
   modbus:
     enabled: true
     log_path: "modbus/modbus.log"
@@ -358,7 +348,8 @@ CFGEOF
     echo "Port $random_port" | sudo tee -a /etc/ssh/sshd_config > /dev/null 2>&1
     success "SSH admin port: $random_port"
 
-    read -p "Restart SSH now? (yes/no): " answer
+    local answer=""
+    read -r -p "Restart SSH now? (yes/no): " answer
     if [ "$answer" = "yes" ]; then
         sudo systemctl disable --now ssh.socket > /dev/null 2>&1
         sudo systemctl restart sshd > /dev/null 2>&1
@@ -375,12 +366,10 @@ CFGEOF
     echo
 }
 
-# Check if the agent daemon process is running
 daemon_running() {
     [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
 }
 
-# Start the agent daemon in the background
 start_daemon() {
     if daemon_running; then
         info "Agent daemon already running (PID $(cat "$PID_FILE"))"
@@ -411,7 +400,6 @@ start_daemon() {
     fi
 }
 
-# Stop the running agent daemon
 stop_daemon() {
     if ! daemon_running; then
         info "Agent daemon not running"
@@ -433,7 +421,6 @@ stop_daemon() {
     success "Agent daemon stopped"
 }
 
-# Show all containers and daemon status
 cmd_status() {
     if ! ensure_compose_cmd; then return 1; fi
     echo
@@ -469,7 +456,6 @@ cmd_status() {
     echo
 }
 
-# List available modules with enabled/running status
 cmd_list() {
     echo
     echo -e "${BOLD}${WHITE}   AVAILABLE MODULES${RESET}"
@@ -504,7 +490,6 @@ cmd_list() {
     _detect_conflicts 2>/dev/null || true
 }
 
-# Enable a module in the agent configuration
 cmd_enable() {
     if [ $# -eq 0 ]; then
         warn "Usage: enable <module>"
@@ -526,7 +511,6 @@ cmd_enable() {
     _detect_conflicts 2>/dev/null || true
 }
 
-# Disable a module in the agent configuration
 cmd_disable() {
     if [ $# -eq 0 ]; then
         warn "Usage: disable <module>"
@@ -546,7 +530,6 @@ cmd_disable() {
     success "Module '$name' disabled"
 }
 
-# Start honeypot modules and the agent daemon
 cmd_start() {
     if ! ensure_compose_cmd; then return 1; fi
     local target="${1:-all}"
@@ -598,7 +581,6 @@ cmd_start() {
     success "Services started"
 }
 
-# Stop running modules
 cmd_stop() {
     if ! ensure_compose_cmd; then return 1; fi
     local target="${1:-all}"
@@ -625,12 +607,10 @@ cmd_stop() {
     success "Services stopped"
 }
 
-# Restart all agent services
 cmd_restart() {
     cmd_stop && cmd_start
 }
 
-# Rebuild agent containers
 cmd_build() {
     if ! ensure_compose_cmd; then return 1; fi
     info "Rebuilding honeypot containers..."
@@ -638,7 +618,6 @@ cmd_build() {
     success "Containers rebuilt"
 }
 
-# Stop modules, pull latest code, rebuild, then offer to restart
 cmd_update() {
     if ! ensure_compose_cmd; then return 1; fi
 
@@ -682,7 +661,6 @@ cmd_update() {
     esac
 }
 
-# Show SQLite buffer status
 cmd_buffer() {
     local db_path="$WORKING_DIRECTORY/data/buffer.db"
     echo
@@ -708,7 +686,6 @@ cmd_buffer() {
     echo
 }
 
-# Test mTLS connectivity to the manager
 cmd_test_connection() {
     if [ ! -f "$CONFIG_FILE" ]; then
         error "Agent not configured. Run 'install' first."
@@ -764,7 +741,6 @@ cmd_test_connection() {
     fi
 }
 
-# Show local raw logs for a module
 cmd_logs() {
     if [ $# -eq 0 ]; then
         warn "Usage: logs <module> [count]"
@@ -773,6 +749,10 @@ cmd_logs() {
     fi
     local module="$1"
     local count="${2:-30}"
+    if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+        error "Count must be a number."
+        return 1
+    fi
 
     local log_file=""
     case "$module" in
@@ -796,14 +776,17 @@ cmd_logs() {
     echo -e "${BOLD}${WHITE}   LOGS: $module${RESET} ${DIM}(last $count lines)${RESET}"
     echo -e "${DIM}   ─────────────────────────────────────────────────${RESET}"
     tail -n "$count" "$full_path" | while IFS= read -r line; do
-        echo -e "   ${DIM}${line}${RESET}"
+        printf '   %b%s%b\n' "$DIM" "$(printf '%s' "$line" | tr -d '\000-\037\177')" "$RESET"
     done
     echo
 }
 
-# Show the agent daemon log
 cmd_daemon_log() {
     local count="${1:-50}"
+    if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+        error "Count must be a number."
+        return 1
+    fi
     if [ ! -f "$DAEMON_LOG" ]; then
         warn "Daemon log not found (daemon not started yet?)"
         return 1
@@ -812,12 +795,11 @@ cmd_daemon_log() {
     echo -e "${BOLD}${WHITE}   DAEMON LOG${RESET} ${DIM}(last $count lines)${RESET}"
     echo -e "${DIM}   ─────────────────────────────────────────────────${RESET}"
     tail -n "$count" "$DAEMON_LOG" | while IFS= read -r line; do
-        echo -e "   ${DIM}${line}${RESET}"
+        printf '   %b%s%b\n' "$DIM" "$(printf '%s' "$line" | tr -d '\000-\037\177')" "$RESET"
     done
     echo
 }
 
-# Main interactive CLI loop with command dispatch
 main_loop() {
     print_banner
 
@@ -830,7 +812,7 @@ main_loop() {
         local prompt
         prompt=$(get_prompt)
 
-        if ! read -e -p "$prompt" input; then
+        if ! read -r -e -p "$prompt" input; then
             echo
             break
         fi
@@ -866,6 +848,11 @@ main_loop() {
         esac
     done
 }
+if [ "${1:-}" = "install" ]; then
+    shift
+    cmd_install "$@"
+    exit $?
+fi
 
 main_loop
 

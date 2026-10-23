@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchLogs } from '../api'
+import { fetchLogs, fetchAllLogs } from '../api'
 import { searchLogs } from '../search'
 import { ProtocolTag } from '../components/Tags'
 import DataTable from '../components/DataTable'
 import { downloadJson } from '../stix'
 import { formatLogTimestampUTC } from '../utils'
 
-// Log search page with MQL query support
+
 export default function Search() {
   const [logs, setLogs] = useState([])
   const [results, setResults] = useState(null)
@@ -32,7 +32,7 @@ export default function Search() {
         .finally(() => setLoading(false))
       return
     }
-    fetchLogs()
+    fetchAllLogs()
       .then(data => {
         setLogs(data)
         const q = searchParams.get('q')
@@ -137,7 +137,7 @@ export default function Search() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Search Bar */}
+
       <div className="glass-card p-4 flex flex-col sm:flex-row gap-3 flex-wrap items-stretch sm:items-center">
         <select
           value={agentFilter}
@@ -175,7 +175,7 @@ export default function Search() {
         </div>
       </div>
 
-      {/* Results */}
+
       {results === null ? (
         <div className="glass-card text-center py-16 text-text-muted italic border-dashed">
           Enter a search query to begin
@@ -196,7 +196,7 @@ export default function Search() {
   )
 }
 
-// Text with search term highlighting
+
 function HighlightedText({ text, terms }) {
   if (!text || !terms || terms.length === 0) return <>{String(text)}</>
 
