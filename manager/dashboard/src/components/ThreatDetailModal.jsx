@@ -11,7 +11,7 @@ function formatLocation(geo) {
   return parts.join(', ')
 }
 
-// Modal showing detailed threat information
+
 export default function ThreatDetailModal({ threat, onClose }) {
   const [geo, setGeo] = useState(null)
 
@@ -32,6 +32,7 @@ export default function ThreatDetailModal({ threat, onClose }) {
     ? `${threat['protocol-score']}/100`
     : 'N/A'
   const reasons = Array.isArray(threat.reasons) ? threat.reasons : []
+  const protocols = Array.isArray(threat.protocols) ? threat.protocols : []
   const location = formatLocation(geo)
   const isPublicIP = geo && geo.public !== false
 
@@ -44,7 +45,7 @@ export default function ThreatDetailModal({ threat, onClose }) {
         className="bg-surface-secondary border border-border rounded-xl p-5 w-full max-w-lg mx-4 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
+
         <div className="flex items-start justify-between mb-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-text-muted font-semibold">
@@ -66,7 +67,7 @@ export default function ThreatDetailModal({ threat, onClose }) {
           </button>
         </div>
 
-        {/* Metrics */}
+
         <div className="grid grid-cols-2 gap-3 mb-4">
           {[
             { label: 'Score', value: score },
@@ -90,7 +91,26 @@ export default function ThreatDetailModal({ threat, onClose }) {
           )}
         </div>
 
-        {/* Reasons */}
+
+        {protocols.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs uppercase tracking-wide text-text-muted font-semibold mb-2">
+              Protocols
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {protocols.map(p => (
+                <span
+                  key={p}
+                  className="px-2 py-1 rounded bg-surface-tertiary text-text-primary text-xs font-mono uppercase"
+                >
+                  {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+
         <div>
           <p className="text-xs uppercase tracking-wide text-text-muted font-semibold mb-2">
             Reasons

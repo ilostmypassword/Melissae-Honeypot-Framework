@@ -7,7 +7,7 @@ const protocolStyles = {
   telnet: 'bg-protocol-telnet/15 text-protocol-telnet',
 }
 
-// Colored tag for a network protocol
+
 export function ProtocolTag({ protocol }) {
   const key = protocol?.toLowerCase() || 'unknown'
   return (
@@ -27,7 +27,7 @@ const verdictStyles = {
   malicious:  'bg-verdict-malicious/15 text-verdict-malicious',
 }
 
-// Colored tag for a threat verdict
+
 export function VerdictTag({ verdict }) {
   const key = verdict?.toLowerCase() || 'unknown'
   return (
@@ -48,7 +48,7 @@ const severityStyles = {
   critical: 'bg-verdict-malicious/15 text-verdict-malicious',
 }
 
-// Colored tag for an alert severity
+
 export function SeverityTag({ severity }) {
   const key = severity?.toLowerCase() || 'medium'
   return (
@@ -68,7 +68,7 @@ const alertStatusStyles = {
   resolved:     'bg-verdict-benign/15 text-verdict-benign',
 }
 
-// Colored tag for an alert lifecycle status
+
 export function AlertStatusTag({ status }) {
   const key = status?.toLowerCase() || 'new'
   return (

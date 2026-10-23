@@ -41,7 +41,7 @@ const CountryShapes = memo(function CountryShapes() {
   )
 })
 
-// Interactive world map with threat markers
+
 export default function WorldMap({ threats, onIPClick }) {
   const [tooltip, setTooltip] = useState(null)
 
@@ -88,13 +88,13 @@ export default function WorldMap({ threats, onIPClick }) {
                 onClick={() => onIPClick?.(m.ip)}
                 style={{ cursor: 'pointer' }}
               >
-                {/* Glow */}
+
                 <circle
                   r={r + 4}
                   fill={verdictColor(m.verdict)}
                   opacity={0.12}
                 />
-                {/* Dot */}
+
                 <circle
                   r={r}
                   fill={verdictColor(m.verdict)}
@@ -108,7 +108,7 @@ export default function WorldMap({ threats, onIPClick }) {
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Tooltip */}
+
       {tooltip && (
         <div className="absolute top-3 right-3 bg-surface-tertiary border border-border rounded-lg p-3 shadow-xl pointer-events-none z-10 min-w-[190px]">
           <p className="font-mono text-text-primary font-semibold text-sm">
@@ -129,7 +129,7 @@ export default function WorldMap({ threats, onIPClick }) {
         </div>
       )}
 
-      {/* Legend */}
+
       <div className="absolute bottom-3 left-3 flex gap-4 text-xs text-text-muted">
         {[
           { label: 'Benign', color: '#22c55e' },

@@ -19,7 +19,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Simulated industrial device identity
 class DeviceProfile:
     def __init__(self, profile_type: str):
         self.profile_type = profile_type
@@ -82,7 +81,6 @@ class DeviceProfile:
                 'di': [random.randint(0, 1) for _ in range(2000)]
             }
 
-# Modbus honeypot with device emulation
 class ModbusHoneypot:
     def __init__(self, device_profile: str = "siemens"):
         self.device = DeviceProfile(device_profile)
@@ -92,7 +90,6 @@ class ModbusHoneypot:
         info = self.device.device_info
         return f"{info['VendorName']} {info['ProductName']} {info['ModelName']} Serial:{info['SerialNumber']} FW:{info['MajorMinorRevision']}"
 
-# Log Modbus TCP client connections
 class ConnectionLogger:
     def __init__(self):
         self.active_connections = set()
@@ -121,7 +118,6 @@ class ConnectionLogger:
 
 connection_logger = ConnectionLogger()
 
-# Async Modbus TCP protocol handler
 class ModbusTCPServer:
     def __init__(self, honeypot: ModbusHoneypot):
         self.honeypot = honeypot
@@ -173,7 +169,6 @@ class ModbusTCPServer:
             writer.close()
             await writer.wait_closed()
 
-# Start the Modbus honeypot server
 async def run_server(honeypot: ModbusHoneypot):
     server_instance = ModbusTCPServer(honeypot)
     

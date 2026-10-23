@@ -15,13 +15,13 @@ const dotColors = {
   other:  'bg-gray-400',
 }
 
-// Format a timestamp for display
+
 function formatTime(ts) {
   if (!Number.isFinite(ts)) return 'Unknown'
   return formatTimestampUTC(new Date(ts).toISOString())
 }
 
-// Process raw killchain events into timeline data
+
 function processEvents(rawEvents) {
   const events = rawEvents
     .map(e => {
@@ -56,7 +56,7 @@ function processEvents(rawEvents) {
   })
 }
 
-// Attack killchain timeline visualization
+
 export default function KillchainPanel({ ip, onClose }) {
   const [events, setEvents] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -89,7 +89,7 @@ export default function KillchainPanel({ ip, onClose }) {
 
   return (
     <div className="glass-card p-5">
-      {/* Header */}
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="section-title">Killchain</p>
@@ -106,7 +106,7 @@ export default function KillchainPanel({ ip, onClose }) {
         </button>
       </div>
 
-      {/* Body */}
+
       <div className="border border-dashed border-border rounded-lg p-4 bg-surface/50">
         {loading && (
           <p className="text-center text-text-muted italic py-4">
@@ -156,7 +156,7 @@ export default function KillchainPanel({ ip, onClose }) {
               ))}
             </div>
 
-            {/* Legend */}
+
             <div className="flex flex-wrap gap-4 mt-3 text-xs text-text-muted">
               {[...new Set(grouped.map(g => g.protocol))].map(proto => (
                 <span key={proto} className="inline-flex items-center gap-2">

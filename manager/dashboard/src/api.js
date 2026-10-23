@@ -14,7 +14,22 @@ export async function fetchLogs(opts = {}) {
   return res.json()
 }
 
-// Fetch server-side aggregate counters for logs without loading every event
+const FETCH_ALL_PAGE_SIZE = 5000
+const FETCH_ALL_SAFETY_CAP = 200_000
+
+export async function fetchAllLogs(opts = {}) {
+  const base = typeof opts === 'string' ? { agent_id: opts } : (opts || {})
+  let skip = 0
+  let all = []
+  while (true) {
+    const page = await fetchLogs({ ...base, limit: FETCH_ALL_PAGE_SIZE, skip })
+    all = all.concat(page)
+    if (page.length < FETCH_ALL_PAGE_SIZE || all.length >= FETCH_ALL_SAFETY_CAP) break
+    skip += FETCH_ALL_PAGE_SIZE
+  }
+  return all
+}
+
 export async function fetchLogStats(filters = {}) {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) {
@@ -26,7 +41,22 @@ export async function fetchLogStats(filters = {}) {
   return res.json()
 }
 
-// Fetch paginated threats from the API
+// Fetch date × hour × protocol × agent buckets aggregated server-side over all
+// logs. Bucket rows look like logs ({ date, hour, protocol, agent_id }) plus a
+// `count` weight, so chart components accept them directly.
+export async function fetchLogTimeline(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v != null && v !== '') params.set(k, v)
+  }
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/logs/timeline${qs ? `?${qs}` : ''}`)
+  if (!res.ok) throw new Error(`API error ${res.status}`)
+  const data = await res.json()
+  return Array.isArray(data?.buckets) ? data.buckets : []
+}
+
+
 export async function fetchThreats(agentId) {
   const params = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ''
   const res = await fetch(`${API_BASE}/threats${params}`)
@@ -34,14 +64,19 @@ export async function fetchThreats(agentId) {
   return res.json()
 }
 
-// Fetch the latest AI threat briefing produced by Inspektor
+
 export async function fetchInspektorReport() {
   const res = await fetch(`${API_BASE}/inspektor/report`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }
 
-// Trigger Inspektor to generate a fresh threat briefing on demand
+export async function fetchInspektorStatus() {
+  const res = await fetch(`${API_BASE}/inspektor/status`)
+  if (!res.ok) return { enabled: false, ready: false, configured: false }
+  return res.json()
+}
+
 export async function generateInspektorReport() {
   const res = await fetch(`${API_BASE}/inspektor/generate`, { method: 'POST' })
   const data = await res.json().catch(() => ({}))
@@ -49,7 +84,7 @@ export async function generateInspektorReport() {
   return data
 }
 
-// Send a conversational message to Inspektor with prior history
+
 export async function sendInspektorChat(message, history = []) {
   const res = await fetch(`${API_BASE}/inspektor/chat`, {
     method: 'POST',
@@ -61,14 +96,14 @@ export async function sendInspektorChat(message, history = []) {
   return data
 }
 
-// Fetch registered agents list
+
 export async function fetchAgents() {
   const res = await fetch(`${API_BASE}/agents`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
   return res.json()
 }
 
-// Fetch attack killchain for an IP
+
 export async function fetchKillchain(ip) {
   const res = await fetch(`${API_BASE}/threats/${encodeURIComponent(ip)}/killchain`)
   if (!res.ok) throw new Error(`API error ${res.status}`)
@@ -114,7 +149,7 @@ export async function fetchGeoIP(ips) {
   return result
 }
 
-// Fetch alerts backlog with optional filters
+
 export async function fetchAlerts(filters = {}) {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) {
@@ -126,7 +161,7 @@ export async function fetchAlerts(filters = {}) {
   return res.json()
 }
 
-// Fetch alert counts grouped by status (for the navbar badge)
+
 export async function fetchAlertCounts(filters = {}) {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) {
@@ -149,7 +184,7 @@ export async function updateAlertStatus(alertId, status) {
   return res.json()
 }
 
-// Bulk update alerts status. 
+
 export async function updateAlertsBulk(ids, status) {
   const CHUNK = 500
   let updated = 0
@@ -167,7 +202,7 @@ export async function updateAlertsBulk(ids, status) {
   return { status: 'ok', updated }
 }
 
-// Fetch the rule catalog
+
 export async function fetchRules() {
   const res = await fetch(`${API_BASE}/rules`)
   if (!res.ok) throw new Error(`API error ${res.status}`)

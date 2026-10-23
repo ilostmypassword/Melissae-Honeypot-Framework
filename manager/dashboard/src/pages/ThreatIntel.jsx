@@ -23,7 +23,7 @@ function sortThreats(list) {
   })
 }
 
-// Threat intelligence page with scoring details
+
 export default function ThreatIntel() {
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
@@ -126,7 +126,7 @@ export default function ThreatIntel() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Stats */}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard value={stats.total} label="Total Threats" />
         <StatCard value={stats.benign} label="Benign" />
@@ -134,7 +134,7 @@ export default function ThreatIntel() {
         <StatCard value={stats.malicious} label="Malicious" />
       </div>
 
-      {/* Killchain Panel */}
+
       {killchainIP && (
         <KillchainPanel
           ip={killchainIP}
@@ -142,7 +142,7 @@ export default function ThreatIntel() {
         />
       )}
 
-      {/* Threat List */}
+
       <div className="glass-card p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h3 className="section-title">Threat List</h3>
@@ -179,7 +179,7 @@ export default function ThreatIntel() {
         />
       </div>
 
-      {/* Threat Chart */}
+
       <div className="glass-card p-5">
         <h3 className="section-title mb-4">Threat Statistics</h3>
         <div className="h-[250px]">
@@ -187,7 +187,7 @@ export default function ThreatIntel() {
         </div>
       </div>
 
-      {/* Detail Modal */}
+
       {detailThreat && (
         <ThreatDetailModal
           threat={detailThreat}

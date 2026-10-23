@@ -4,12 +4,26 @@ import remarkGfm from 'remark-gfm'
 import { useInspektor } from '../context/InspektorContext'
 import { mdComponents, timeAgo } from '../components/InspektorMarkdown'
 import { exportReportToPdf } from '../inspektorPdf'
+import { fetchInspektorStatus } from '../api'
 
 export default function Inspektor() {
   const { messages, busy, error, lastMeta, send, runReport, clearChat, markActive } = useInspektor()
   const [input, setInput] = useState('')
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
+
+  const [status, setStatus] = useState(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+
+  const checkStatus = useCallback(() => {
+    setStatusLoading(true)
+    return fetchInspektorStatus()
+      .then(setStatus)
+      .catch(() => setStatus({ enabled: false, ready: false, configured: false }))
+      .finally(() => setStatusLoading(false))
+  }, [])
+
+  useEffect(() => { checkStatus() }, [checkStatus])
 
   // Mark the conversation as actively watched while this page is mounted and
   // the tab is visible — this resets the unread badge and suppresses notifs.
@@ -46,9 +60,16 @@ export default function Inspektor() {
 
   const isEmpty = messages.length <= 1 && messages[0]?.id === 'intro'
 
+  if (statusLoading) {
+    return <InspektorLoadingState />
+  }
+
+  if (!status?.configured) {
+    return <InspektorSetupGuide onRetry={checkStatus} />
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-accent/25 to-accent/5 ring-1 ring-accent/30 text-accent shrink-0">
@@ -97,7 +118,7 @@ export default function Inspektor() {
         </div>
       </div>
 
-      {/* Chat stream */}
+
       <div
         ref={scrollRef}
         className="glass-card flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0 scroll-smooth"
@@ -127,7 +148,7 @@ export default function Inspektor() {
         )}
       </div>
 
-      {/* Composer */}
+
       <div className="mt-4 shrink-0">
         <div className="glass-card flex items-end gap-2 p-2 focus-within:ring-1 focus-within:ring-accent/40 transition-shadow">
           <textarea
@@ -153,6 +174,136 @@ export default function Inspektor() {
         </p>
       </div>
     </div>
+  )
+}
+
+
+function InspektorLoadingState() {
+  return (
+    <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] animate-fade-in">
+      <div className="flex items-center gap-3 mb-4 shrink-0">
+        <div className="skeleton w-11 h-11 rounded-xl" />
+        <div className="space-y-2">
+          <div className="skeleton h-4 w-28" />
+          <div className="skeleton h-3 w-40" />
+        </div>
+      </div>
+      <div className="skeleton flex-1 rounded-xl" />
+    </div>
+  )
+}
+
+// Shown instead of the chat when Inspektor has no Bedrock credentials
+// configured yet — walks the user through enabling it via the manager CLI.
+function InspektorSetupGuide({ onRetry }) {
+  const [checking, setChecking] = useState(false)
+
+  const handleRetry = async () => {
+    setChecking(true)
+    try {
+      await onRetry()
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] animate-fade-in">
+      <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-accent/25 to-accent/5 ring-1 ring-accent/30 text-accent shrink-0">
+            <InspektorGlyph />
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-surface bg-text-muted" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-text-primary tracking-tight">Inspektor</h1>
+              <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted">
+                Not configured
+              </span>
+            </div>
+            <span className="text-[11px] text-text-muted">AI threat analyst — setup required</span>
+          </div>
+        </div>
+        <button
+          onClick={handleRetry}
+          disabled={checking}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-surface-tertiary hover:bg-surface-hover text-text-secondary hover:text-text-primary text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+        >
+          <RefreshIcon spinning={checking} />
+          {checking ? 'Checking…' : 'Check again'}
+        </button>
+      </div>
+
+
+      <div className="glass-card flex-1 overflow-y-auto p-5 sm:p-8">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-accent/25 to-accent/5 ring-1 ring-accent/30 text-accent mb-1">
+              <KeyIcon />
+            </div>
+            <h2 className="text-lg font-semibold text-text-primary">Inspektor isn't set up yet</h2>
+            <p className="text-sm text-text-secondary max-w-md mx-auto">
+              Inspektor needs AWS Bedrock credentials. Setup takes about a minute.
+            </p>
+          </div>
+
+          <ol className="space-y-4">
+            <Step n={1} title="Run the setup wizard">
+              <p>In the <code className="font-mono text-xs bg-surface-tertiary px-1.5 py-0.5 rounded">manager/</code> directory on your host:</p>
+              <CodeBlock>./melissae-manager.sh inspektor</CodeBlock>
+            </Step>
+            <Step n={2} title="Enter your AWS Bedrock credentials">
+              <p>
+                Access key, secret key, region and model ID. Make sure the model is enabled in
+                <strong> AWS Console → Bedrock → Model access</strong>.
+              </p>
+            </Step>
+            <Step n={3} title="Check again" last>
+              <p>Once the container is up, click <strong>Check again</strong> above.</p>
+            </Step>
+          </ol>
+
+          <p className="text-[11px] text-text-muted text-center pt-2 border-t border-border/40">
+            Re-run the same command at any time to change credentials or disable Inspektor.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Step({ n, title, children, last }) {
+  return (
+    <li className="flex gap-3">
+      <div className="flex flex-col items-center shrink-0">
+        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-accent/15 text-accent text-xs font-bold">
+          {n}
+        </span>
+        {!last && <span className="w-px flex-1 bg-border/50 mt-1" />}
+      </div>
+      <div className="min-w-0 pb-1 space-y-1.5">
+        <div className="text-sm font-semibold text-text-primary">{title}</div>
+        <div className="text-[13px] leading-relaxed text-text-secondary space-y-1.5">{children}</div>
+      </div>
+    </li>
+  )
+}
+
+function CodeBlock({ children }) {
+  return (
+    <pre className="text-[12.5px] font-mono bg-surface-tertiary/80 border border-border/50 rounded-lg px-3 py-2 overflow-x-auto text-accent">
+      {children}
+    </pre>
+  )
+}
+
+function KeyIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6M15.5 7.5 18 10M18 10l2.5-2.5M15.5 7.5 13 5" />
+    </svg>
   )
 }
 
@@ -356,6 +507,15 @@ function PdfIcon() {
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <path d="M14 2v6h6" />
       <path d="M9 15h6M9 18h3" />
+    </svg>
+  )
+}
+
+function RefreshIcon({ spinning }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={spinning ? 'animate-spin' : ''}>
+      <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+      <path d="M21 3v5h-5" />
     </svg>
   )
 }

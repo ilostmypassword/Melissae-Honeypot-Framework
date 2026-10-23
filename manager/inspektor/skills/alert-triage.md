@@ -15,7 +15,9 @@ last hour", "explain MLS009 hits").
    underlying actions.
 4. Separate signal from noise: low-severity scans (MLS005/MLS006/MLS012) are
    background; prioritize critical rules (successful logins, post-exploitation,
-   CVE, ICS writes).
+   CVE) and high-impact ones (ICS writes MLS007, MQTT tampering MLS014).
+   Brute-force rules (MLS002/MLS008/MLS013) matter mainly when the same IP also
+   fired a success rule: that sequence means the attacker got in.
 
 ## Tools used by this skill
 

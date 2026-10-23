@@ -30,7 +30,6 @@ def create_ssl_context():
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     return ctx
 
-# Poll a single agent and update its health status
 def poll_agent(agent: dict, ssl_ctx: ssl.SSLContext) -> dict:
     host = agent.get("host", "")
     port = agent.get("health_port", 8444)
@@ -55,7 +54,6 @@ def poll_agent(agent: dict, ssl_ctx: ssl.SSLContext) -> dict:
             "error": str(e),
         }
 
-# Entry point — poll agents on a regular interval
 def main():
     try:
         client = MongoClient(MONGO_URI)

@@ -20,7 +20,9 @@ RUN rm -f /usr/bin/apt /usr/bin/apt-get /usr/bin/dpkg 2>/dev/null || true
 
 RUN rm -f /usr/bin/zsh /usr/bin/fish /usr/bin/csh 2>/dev/null || true
 
-RUN sed -i '/imklog/s/^/#/' /etc/rsyslog.conf
+# High-precision ISO timestamps (required by the agent parser's telnet patterns)
+RUN sed -i '/imklog/s/^/#/' /etc/rsyslog.conf && \
+    sed -i '/^\$ActionFileDefaultTemplate/s/^/#/' /etc/rsyslog.conf
 
 RUN mkdir -p /host-logs/telnet && \
     chmod -R 777 /host-logs/telnet && \
@@ -37,6 +39,8 @@ RUN { \
       echo '[ -z "$REMOTE_IP" ] && export REMOTE_IP="unknown"'; \
       echo '_log_cmd() {'; \
       echo '    local cmd=$(history 1 | sed '"'"'s/^[ ]*[0-9]*[ ]*//'"'"')'; \
+      echo '    cmd=${cmd//$'"'"'\n'"'"'/ }'; \
+      echo '    cmd=${cmd//$'"'"'\r'"'"'/ }'; \
       echo '    [ -n "$cmd" ] && echo "$(date +"%Y-%m-%d %H:%M:%S") | $REMOTE_IP | $(whoami) | $cmd" >> /host-logs/telnet/commands.log'; \
       echo '}'; \
       echo 'PROMPT_COMMAND='"'"'_log_cmd'"'"''; \

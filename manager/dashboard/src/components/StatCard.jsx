@@ -1,6 +1,41 @@
+import { useState, useEffect, useRef } from 'react'
 import { formatNumber } from '../utils'
 
-// Dashboard statistic card with label and value
+// Animate integer values from their previous value to the new target.
+// Non-integer values are returned untouched; reduced-motion users get no animation.
+function useCountUp(target, duration = 700) {
+  const animatable = Number.isInteger(target)
+  const [display, setDisplay] = useState(animatable ? 0 : target)
+  const fromRef = useRef(animatable ? 0 : target)
+
+  useEffect(() => {
+    if (!animatable) return undefined
+    const reduced = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced || fromRef.current === target) {
+      fromRef.current = target
+      setDisplay(target)
+      return undefined
+    }
+    const from = fromRef.current
+    const start = performance.now()
+    let raf = 0
+    const tick = now => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - t, 3)
+      const v = t >= 1 ? target : Math.round(from + (target - from) * eased)
+      fromRef.current = v
+      setDisplay(v)
+      if (t < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, animatable, duration])
+
+  return animatable ? display : target
+}
+
+
 export default function StatCard({ value, label, onClick, variant, trend }) {
   const variants = {
     default: 'border-border/50',
@@ -11,6 +46,7 @@ export default function StatCard({ value, label, onClick, variant, trend }) {
   }
 
   const isCritical = variant === 'critical'
+  const shownValue = useCountUp(value)
 
   return (
     <div
@@ -23,7 +59,7 @@ export default function StatCard({ value, label, onClick, variant, trend }) {
       <div className="flex items-start justify-between gap-2">
         <div className={`text-3xl font-bold font-mono tracking-tight ${isCritical ? 'text-verdict-malicious' : 'text-text-primary'}`}>
           {isCritical && <span className="inline-block w-2 h-2 bg-verdict-malicious rounded-full animate-pulse mr-2 align-middle"></span>}
-          {typeof value === 'number' ? formatNumber(value) : value}
+          {typeof shownValue === 'number' ? formatNumber(shownValue) : shownValue}
         </div>
         {trend != null && trend !== 0 && (
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0 mt-1 ${

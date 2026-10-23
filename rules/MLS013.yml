@@ -1,0 +1,15 @@
+id: MLS013
+name: Telnet brute-force attempt
+description: >
+  Multiple Telnet login failures from the same IP within a short window.
+  Typical of IoT botnets (Mirai-style) cycling through default credentials.
+severity: high
+enabled: true
+schedule: "*/1 * * * *"
+lookback: 5m
+mql: 'protocol:telnet AND action:"Login failed"'
+group_by: ip
+threshold: 5
+score: 35
+tags: [brute-force, credential-access, iot-botnet]
+mitre: [T1110]

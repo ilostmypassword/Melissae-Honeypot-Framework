@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:24.04
 
 RUN apt-get update && \
     apt-get install -y openssh-server rsyslog bash && \
@@ -14,7 +14,11 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/ss
     echo "PermitRootLogin no" >> /etc/ssh/sshd_config && \
     echo "Port 22" >> /etc/ssh/sshd_config
 
-RUN sed -i '/imklog/s/^/#/' /etc/rsyslog.conf
+# High-precision ISO timestamps: the agent parser dedupes on the timestamp, so
+# second-precision traditional syslog format collapses brute-force bursts into
+# a single log entry
+RUN sed -i '/imklog/s/^/#/' /etc/rsyslog.conf && \
+    sed -i '/^\$ActionFileDefaultTemplate/s/^/#/' /etc/rsyslog.conf
 
 RUN mkdir -p /host-logs/ssh && \
     chmod -R 777 /host-logs/ssh && \

@@ -1,4 +1,4 @@
-// MQL parser mirroring
+// MQL parser; must stay in sync with manager/scripts/mql.py
 
 const FIELDS = {
   protocol:    log => log.protocol,
@@ -44,7 +44,7 @@ function matchesTerm(log, term) {
   return Object.values(log).some(v => String(v ?? '').toLowerCase().includes(needle))
 }
 
-// Tokenizer
+
 const TOKEN_RE = /\(|\)|\bAND\b|\bOR\b|\bNOT\b|!|[^\s():"]+:"[^"]*"|"[^"]*"|[^\s()]+/gi
 const KEYWORDS = new Set(['AND', 'OR', 'NOT'])
 
@@ -127,7 +127,7 @@ function collectTerms(node, out) {
   return out
 }
 
-// Execute a search query with AND/OR/NOT logic and parenthesized groups
+
 export function searchLogs(logs, query) {
   if (!query || !query.trim()) return { results: [], terms: [] }
   const tokens = tokenize(query)

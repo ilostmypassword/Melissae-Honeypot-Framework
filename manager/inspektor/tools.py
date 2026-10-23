@@ -14,8 +14,9 @@ KILLCHAIN_LIMIT: int = 200
 
 _VALID_VERDICTS = {"malicious", "suspicious", "benign"}
 _ALLOWED_LOG_FIELDS = {
-    "ip", "protocol", "action", "path", "user", "user-agent", "agent_id",
+    "ip", "protocol", "action", "path", "user", "user-agent", "agent_id", "cve",
 }
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _MAX_LIST = 100
 
 
@@ -25,10 +26,6 @@ def _as_json(value) -> str:
     except (TypeError, ValueError):
         return str(value)
 
-
-# --------------------------------------------------------------------------- #
-# Tool calls
-# --------------------------------------------------------------------------- #
 
 @tool
 def get_global_stats() -> str:
@@ -205,7 +202,7 @@ def get_recent_alerts(limit: int = 30) -> str:
 def search_logs(field: str, value: str, limit: int = 25) -> str:
     """Search raw honeypot logs by an exact field match and return matching
     events. Allowed fields: ip, protocol, action, path, user, user-agent,
-    agent_id. Use this to investigate a specific indicator (e.g. a username, a
+    agent_id, cve. Use this to investigate a specific indicator (e.g. a username, a
     URL path or a protocol)."""
     if DB is None:
         return "Database unavailable."
@@ -222,7 +219,7 @@ def search_logs(field: str, value: str, limit: int = 25) -> str:
             .find(
                 {f: str(value)},
                 {"_id": 0, "timestamp": 1, "ip": 1, "protocol": 1, "action": 1,
-                 "path": 1, "user": 1, "user-agent": 1, "agent_id": 1},
+                 "path": 1, "user": 1, "user-agent": 1, "agent_id": 1, "cve": 1},
             )
             .sort("timestamp", -1)
             .limit(lim)
@@ -291,7 +288,10 @@ def get_log_overview(top_ips: int = 15) -> str:
             {"$sort": {"events": -1}},
             {"$limit": n},
         ]))
-        distinct_ips = len(logs.distinct("ip"))
+        distinct_ips = next(iter(logs.aggregate([
+            {"$group": {"_id": "$ip"}},
+            {"$count": "n"},
+        ])), {}).get("n", 0)
     except PyMongoError as e:
         return f"Database error: {e}"
 
@@ -320,10 +320,7 @@ def get_log_overview(top_ips: int = 15) -> str:
     })
 
 
-# --------------------------------------------------------------------------- #
-# Skills — loaded on demand so the system prompt only carries a short index
-# --------------------------------------------------------------------------- #
-
+# Skills are loaded on demand so the system prompt only carries a short index
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 
 
@@ -345,18 +342,23 @@ def _expand_tool_refs(text: str) -> str:
 
 def _skill_meta(path: Path) -> Dict[str, str]:
     title = path.stem.replace("-", " ").title()
-    summary = ""
+    summary_lines: List[str] = []
     try:
+        in_summary = False
         for line in path.read_text(encoding="utf-8").splitlines():
             s = line.strip()
-            if s.startswith("# Skill:"):
+            if in_summary:
+                if not s:
+                    break
+                summary_lines.append(s)
+            elif s.startswith("# Skill:"):
                 title = s[len("# Skill:"):].strip() or title
             elif s.lower().startswith("**use when:**"):
-                summary = s.split("**", 2)[-1].strip()
-                break
+                summary_lines.append(s.split("**", 2)[-1].strip())
+                in_summary = True
     except OSError:
         pass
-    return {"name": path.stem, "title": title, "summary": summary}
+    return {"name": path.stem, "title": title, "summary": " ".join(summary_lines).strip()}
 
 
 def skill_names() -> List[str]:
@@ -380,14 +382,13 @@ def skills_index() -> str:
 def get_skill(name: str) -> str:
     """Load the full step-by-step procedure for one of Inspektor's named skills,
     then follow it. Call this before acting on any task that matches a skill in
-    the system-prompt skill index. Available skills: threat-briefing,
-    ip-investigation, attacker-ranking, alert-triage, log-hunting, agent-health."""
+    the system-prompt skill index; its available names are listed there."""
     key = (name or "").strip().lower().replace(" ", "-")
     if not key:
         return f"Provide a skill name. Available: {', '.join(skill_names())}"
-    path = SKILLS_DIR / f"{key}.md"
-    if not path.is_file():
+    if not _SKILL_NAME_RE.match(key) or key not in skill_names():
         return f"Unknown skill '{name}'. Available: {', '.join(skill_names())}"
+    path = SKILLS_DIR / f"{key}.md"
     try:
         return _expand_tool_refs(path.read_text(encoding="utf-8")).strip()
     except OSError as e:

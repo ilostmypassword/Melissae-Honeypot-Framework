@@ -26,7 +26,7 @@ function formatTime(val) {
   return parsed ? formatTimestampUTC(parsed.toISOString()) : val
 }
 
-// Registered agents list with health status
+
 export default function Agents() {
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -94,7 +94,6 @@ export default function Agents() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-text-primary tracking-tight">Agents</h1>
@@ -113,7 +112,7 @@ export default function Agents() {
         </span>
       </div>
 
-      {/* Agent Cards */}
+
       {agents.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <div className="text-3xl mb-3 opacity-30">⬡</div>
@@ -151,7 +150,6 @@ function AgentCard({ agent }) {
 
   return (
     <div className={`glass-card-hover p-5 flex flex-col gap-4 ${isUnreachable ? 'opacity-60' : ''}`}>
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor} ${status === 'healthy' ? 'shadow-[0_0_6px_1px] shadow-verdict-benign/35' : ''}`} />
@@ -167,7 +165,7 @@ function AgentCard({ agent }) {
         </span>
       </div>
 
-      {/* Unreachable notice */}
+
       {isUnreachable && (
         <div className="flex items-center gap-2 text-[10px] text-verdict-malicious/80 bg-verdict-malicious/5 border border-verdict-malicious/15 rounded-lg px-3 py-2">
           <span className="shrink-0">⚠</span>
@@ -175,7 +173,7 @@ function AgentCard({ agent }) {
         </div>
       )}
 
-      {/* Info grid */}
+
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
         <InfoCell label="Host" value={agent.host || '—'} />
         {version && <InfoCell label="Version" value={version} />}
@@ -188,7 +186,7 @@ function AgentCard({ agent }) {
         )}
       </div>
 
-      {/* Services */}
+
       {modules.length > 0 && (
         <div className="border-t border-white/5 pt-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -229,7 +227,7 @@ function AgentCard({ agent }) {
         </div>
       )}
 
-      {/* No modules fallback */}
+
       {modules.length === 0 && status !== 'enrolled' && status !== 'pending' && !isUnreachable && (
         <div className="text-[10px] text-text-muted italic border-t border-white/5 pt-3">
           No module data — waiting for health check

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import ipaddress
 import json
 import math
@@ -124,7 +125,6 @@ def batch_geolocate(ips: List[str]) -> Dict[str, Dict]:
     return results
 
 
-# Group alerts (last N days) by IP
 def _aggregate_alerts_by_ip(db) -> Dict[str, Dict]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=ALERTS_LOOKBACK_DAYS)).isoformat()
     cursor = db["alerts"].find(
@@ -212,6 +212,22 @@ def _aggregate_passive_ips_from_logs(db, alerted_ips: set) -> Dict[str, Dict]:
         }
     return by_ip
 
+def _protocols_by_ip(db) -> Dict[str, List[str]]:
+    try:
+        cursor = db["logs"].aggregate([
+            {"$match": {"ip": {"$ne": None}}},
+            {"$group": {"_id": "$ip", "protocols": {"$addToSet": "$protocol"}}},
+        ], allowDiskUse=True)
+        return {
+            doc["_id"]: sorted(p for p in (doc.get("protocols") or [])
+                               if isinstance(p, str) and p)
+            for doc in cursor if isinstance(doc.get("_id"), str)
+        }
+    except PyMongoError as e:
+        print(f"[threatIntel] protocol aggregation error: {e}")
+        return {}
+
+
 def _rule_contribution(score: int, count: int) -> float:
     count = max(1, int(count))
     return float(score) + 5.0 * math.log2(count)
@@ -281,9 +297,12 @@ def recompute_threats(db) -> int:
     if new_ips:
         existing_geo.update(batch_geolocate(new_ips))
 
+    protocols_by_ip = _protocols_by_ip(db)
+
     ops = []
     for ip, bucket in by_ip.items():
         threat = _compute_threat(ip, bucket)
+        threat["protocols"] = protocols_by_ip.get(ip, [])
         geo = existing_geo.get(ip)
         if geo:
             threat["geo"] = geo
@@ -318,4 +337,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Cron fires every minute; under heavy log volume a run can exceed 60s and
+    # overlapping runs compound the Mongo load. Skip if one is still going.
+    _lock = open("/tmp/melissae-threatintel.lock", "w")
+    try:
+        fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("[threatIntel] previous run still in progress, skipping")
+        raise SystemExit(0)
     main()
