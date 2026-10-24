@@ -186,7 +186,7 @@ https://<manager-ip>
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and join the hive on Discord:
+Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md) and join the hive on Discord:
 
 <p>
   <a href="https://discord.gg/RXWn85cnYm"><img src="https://img.shields.io/badge/Discord-Join%20the%20hive-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
