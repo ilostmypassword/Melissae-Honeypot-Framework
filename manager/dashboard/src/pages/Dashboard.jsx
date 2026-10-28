@@ -5,7 +5,6 @@ import StatCard from '../components/StatCard'
 import { SeverityTag } from '../components/Tags'
 import { DailyChart, ProtocolChart } from '../components/charts'
 import AgentTopology from '../components/AgentTopology'
-import InspektorBriefing from '../components/InspektorBriefing'
 import { formatNumber, filterByDateRange, computeStats, computeTrend } from '../utils'
 import { buildGroups } from './Alerts'
 
@@ -172,9 +171,6 @@ export default function Dashboard() {
         <StatCard value={s.protocols.http} label="HTTP" onClick={() => goSearch('protocol:http')} trend={prevS.httpTrend} />
         <StatCard value={s.protocols.ftp + s.protocols.modbus + s.protocols.mqtt + s.protocols.telnet} label="Other" onClick={() => goSearch('protocol:ftp OR protocol:modbus OR protocol:mqtt OR protocol:telnet')} />
       </div>
-
-
-      <InspektorBriefing />
 
       {/* Recent alerts + Topology side by side - row sized for 7 alerts max */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch lg:h-[340px]">
