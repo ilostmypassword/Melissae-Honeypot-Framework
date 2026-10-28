@@ -22,6 +22,7 @@ import ActivityStats from './pages/ActivityStats'
 import AttackerStats from './pages/AttackerStats'
 import Alerts from './pages/Alerts'
 import Inspektor from './pages/Inspektor'
+import Rules from './pages/Rules'
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement,
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/inspektor" element={<Inspektor />} />
           <Route path="/alerts" element={<Alerts />} />
+          <Route path="/rules" element={<Rules />} />
           <Route path="/search" element={<Search />} />
           <Route path="/threats" element={<ThreatIntel />} />
           <Route path="/map" element={<Map />} />
